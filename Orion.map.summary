@@ -1,13 +1,13 @@
-Analysis & Synthesis Status : Successful - Wed Oct  9 19:13:41 2024
+Analysis & Synthesis Status : Successful - Tue Apr  8 17:16:29 2025
 Quartus Prime Version : 20.1.1 Build 720 11/11/2020 SJ Lite Edition
 Revision Name : Orion
 Top-level Entity Name : Orion
 Family : Cyclone IV E
-Total logic elements : 97,247
-    Total combinational functions : 71,591
-    Dedicated logic registers : 77,236
-Total registers : 77246
-Total pins : 182
+Total logic elements : 97,391
+    Total combinational functions : 71,723
+    Dedicated logic registers : 77,264
+Total registers : 77274
+Total pins : 185
 Total virtual pins : 0
 Total memory bits : 1,229,984
 Embedded Multiplier 9-bit elements : 298

@@ -595,6 +595,13 @@
                        message telling us to switch the ANT when we are already in TX mode sending RF.
                        The client program should send this before going to TX.
 
+2025	Feb 15 - (N1GP) Added keyout to bit 7 of CC_encoder data byte 0. This can be used to
+                        generate a sidetone on the client software. Also now latching ADC0 & ADC1 overload
+			so if it happens only once it gets sent in CC_encoder. CC_encoder was sending
+			every 50ms, now every 200ms unless PTT or realtime events.
+
+2025	Mar 12 - (N1GP) Added timings in phy_cfg.v to better support KSZ_9031 phy.
+
 */
 
 module Orion(
@@ -723,6 +730,10 @@ module Orion(
   output USEROUT4,
   output USEROUT5,
   output USEROUT6,
+  output USEROUT7,
+  output USEROUT8,
+  output USEROUT9,
+  output USEROUT10,
   
     //debug led's
   output Status_LED,      
@@ -762,8 +773,8 @@ module Orion(
   //output wire RAM_A9,
   //output wire RAM_A10,
   //output wire RAM_A11,
-  output wire RAM_A12,
-  output wire RAM_A13  
+  //output wire RAM_A12,
+ output wire RAM_A13  
 );
 
 assign USEROUT0 = run ? Open_Collector[1] : 1'b0;					
@@ -772,7 +783,11 @@ assign USEROUT2 = run ? Open_Collector[3] : 1'b0;
 assign USEROUT3 = run ? Open_Collector[4] : 1'b0;  		
 assign USEROUT4 = run ? Open_Collector[5] : 1'b0; 
 assign USEROUT5 = run ? Open_Collector[6] : 1'b0; 
-assign USEROUT6 = run ? Open_Collector[7] : 1'b0; 
+assign USEROUT6 = run ? Open_Collector[7] : 1'b0;
+assign USEROUT7 = run ? Open_Collector[8] : 1'b0; 
+assign USEROUT8 = run ? Open_Collector[9] : 1'b0; 
+assign USEROUT9 = run ? Open_Collector[10] : 1'b0;
+assign USEROUT10 = run ? Open_Collector[11] : 1'b0;  
 
 assign RAM_A0  = 0;
 assign RAM_A1  = 0;
@@ -786,7 +801,7 @@ assign RAM_A7  = 0;
 //assign RAM_A9  = 0;
 //assign RAM_A10  = 0;
 //assign RAM_A11  = 0;
-assign RAM_A12  = 0;
+//assign RAM_A12  = 0;
 assign RAM_A13  = 0;
 
 assign PGA = 0;								// 1 = gain of 3dB, 0 = gain of 0dB
@@ -815,8 +830,8 @@ parameter IF_TPD  = 2;
 
 localparam board_type = 8'h05;		  	// 00 for Metis, 01 for Hermes, 02 for Griffin, 03 for Angelia, and 05 for Orion
 parameter  Orion_version = 8'd22;			// FPGA code version
-parameter  beta_version = 8'd6;	// Should be 0 for official release
-parameter  protocol_version = 8'd43;	// openHPSDR protocol version implemented
+parameter  beta_version = 8'd7;	// Should be 0 for official release
+parameter  protocol_version = 8'd44;	// openHPSDR protocol version implemented
 
 //--------------------------------------------------------------
 // Reset Lines - C122_rst, IF_rst, SPI_Alex_reset
@@ -1820,6 +1835,7 @@ wire [7:0] PWM_source =  TX_ATTEN_SELECT ? Drive_Level : Drive_PWM;
 // PWM DAC to set drive current to DAC. PWM_count increments 
 // using rx_clock. If the count is less than the drive 
 // level set by the PC then DAC_ALC will be high, otherwise low.  
+
 reg [7:0] PWM_count;
 always @ (posedge rx_clock)
 begin 
@@ -1925,7 +1941,7 @@ wire   [7:0] Wideband_update_rate;
 wire   [7:0] Wideband_packets_per_frame; 
 wire  [15:0] Envelope_PWM_max;
 wire  [15:0] Envelope_PWM_min;
-wire   [7:0] Open_Collector;
+wire   [11:0] Open_Collector; //Anvelina_ProIIIdx
 wire   [7:0] User_Outputs;
 wire   [7:0] Mercury_Attenuator;	
 wire 			 CWX;						// CW keyboard from PC 
@@ -2152,13 +2168,14 @@ assign ALL_sequence_errors = HP_sequence_errors + Audio_sequence_errors + DUC_se
 
 cdc_sync #(32)cdc_sync_ALL (.siga(ALL_sequence_errors), .rstb(1'b0), .clkb(tx_clock), .sigb(ALL_sequence_errors_tx));
 
-CC_encoder #(50, NR) CC_encoder_inst (				// 50mS update rate
+CC_encoder #(NR) CC_encoder_inst (				// 50mS update rate
 					//	inputs
 					.clock(tx_clock),					// tx_clock  125MHz
 					.ACK (CC_ack),
 					.PTT ((break_in & CW_PTT) | debounce_PTT),
 					.Dot (debounce_DOT),
 					.Dash(debounce_DASH),
+					.keyout(keyout & run),
 					//.frequency_change(frequency_change),
 					.locked_10MHz(locked_10MHz),		// set if the 10MHz divider PLL is locked.
 					.ADC0_overload (OVERFLOW),
@@ -2172,8 +2189,9 @@ CC_encoder #(50, NR) CC_encoder_inst (				// 50mS update rate
 					.User_IO ({3'b0, IO2, debounce_IO8, IO6, debounce_IO5, IO4}),
 					.pk_detect_ack(pk_detect_ack),		// from Orion_ADC
 					.FPGA_PTT(FPGA_PTT),						// when set change update rate to 1mS
-					.Debug_data(16'd0),
-					//.Debug_data({6'b000000,~DEBUG_LED10,~DEBUG_LED9,~DEBUG_LED8,~DEBUG_LED7,~DEBUG_LED6,~DEBUG_LED5,~DEBUG_LED4,~DEBUG_LED3,~DEBUG_LED2,~DEBUG_LED1}),
+					.Debug_data({13'd0, TX_ATTEN_SELECT, keyout, is_9031}),
+					//.Debug_data(16'd0),
+					//.Debug_data({6'd0,~DEBUG_LED10,~DEBUG_LED9,~DEBUG_LED8,~DEBUG_LED7,~DEBUG_LED6,~DEBUG_LED5,~DEBUG_LED4,~DEBUG_LED3,~DEBUG_LED2,~DEBUG_LED1}),
 					.sequence_errors(ALL_sequence_errors_tx),
 							
 					//	outputs
