@@ -40,7 +40,8 @@ module udp_recv(
   output reg [15:0] to_port,					// port that data is being sent to.
   output reg [31:0] udp_destination_ip,   
   output reg [47:0] udp_destination_mac,
-  output reg [15:0] udp_destination_port
+  output reg [15:0] udp_destination_port,
+  output            udp_destination_valid
   );
 
   
@@ -52,73 +53,78 @@ reg[3:0] state;
 reg [10:0] header_len, packet_len, byte_no;
 reg dhcp_data;
 reg [15:0] remote_port;
+reg        destination_valid = 1'b0;
 
-assign active      = rx_enable & (state == ST_PAYLOAD);// & !dhcp_data;
+assign active      = rx_enable & (state == ST_PAYLOAD) & !dhcp_data;
 assign dhcp_active = rx_enable & (state == ST_PAYLOAD) & dhcp_data;
+
+assign udp_destination_ip    = remote_ip;
+assign udp_destination_mac   = remote_mac;
+assign udp_destination_port  = remote_port;
+assign udp_destination_valid = destination_valid;
 
 always @(posedge clock)
   if (rx_enable)
     case (state)
-	  IDLE:
+	IDLE:
         begin
-        //save remote port address
-        remote_port[15:8] <= data; 
-        state <= PORT;
-		  dhcp_data <= 1'b0;   
+		//save remote port address
+		remote_port[15:8] <= data; 
+		state <= PORT;
+		dhcp_data <= 1'b0;   
         end
 		  
-		PORT:
-			begin
+	PORT:
+		begin
 			remote_port <= {remote_port[15:8], data};
 			byte_no <= 11'd3;
 			state <= VERIFY;
-			end 
+		end 
 	 
-      VERIFY:
+	VERIFY:
         begin        
-			  case (byte_no)
-				 // get the port the packet is addressed to
-			    3:  to_port[15:8] <= data;
-				 4:  to_port[7:0]  <= data;
+		case (byte_no)
+			 // get the port the packet is addressed to
+			3:  to_port[15:8] <= data;
+			4:  to_port[7:0]  <= data;
 			 
-	           // verify DHCP, broadcast to port 1024  or the ip address its being sent to then save packet length				 
-				 5: begin 
-						if (to_port == 16'd68 & dhcp_enable) dhcp_data <= 1'b1;
-						else if (broadcast) begin
-							if (to_port != 16'd1024) state <= ST_DONE;
-						end 
-						else if (local_ip != to_ip ) state <= ST_DONE; 			// if not for this  ip then exit
-						packet_len[10:8] <= data[2:0];
-					 end
+			// verify DHCP, broadcast to port 1024  or the ip address its being sent to then save packet length				 
+			5: begin 
+				if (to_port == 16'd68 && dhcp_enable) dhcp_data <= 1'b1;       // check for DHCP data
+				else if (broadcast) begin
+					if (to_port != 16'd1024) state <= ST_DONE;
+				end 
+				else if (local_ip != to_ip ) state <= ST_DONE; 			// if not for this  ip then exit
+				packet_len[10:8] <= data[2:0];
+			end
 					 
-             6: packet_len[7:0] <= data;  
-				 
-				 // skip the checksum then signal we have a udp packet available,save destination IP, MAC and port
-				 8: begin
-						udp_destination_ip   <= remote_ip;  
-						udp_destination_mac  <= remote_mac;
-						udp_destination_port <= remote_port;
-						state <= ST_PAYLOAD;
-					 end 
+			6: begin
+				packet_len[7:0] <= data;
+				destination_valid <= ~destination_valid;
+			end
+			 
+			// skip the checksum then signal we have a udp packet available,save destination IP, MAC and port
+			8: begin
+				state <= ST_PAYLOAD;
+			end 
 				  
-				// default:  *** need to get this from ip_recv
-				//	if (byte_no == header_len) state <= ST_PAYLOAD;
-			  endcase  
-			  
-        byte_no <= byte_no + 11'd1;
+			// default:  *** need to get this from ip_recv
+			//	if (byte_no == header_len) state <= ST_PAYLOAD;
+		endcase  
+		  
+		byte_no <= byte_no + 11'd1;
         end
         
-      ST_PAYLOAD:
-        begin  
-        //end of payload, ignore the ethernet crc that follows
-        if (byte_no == packet_len) state <= ST_DONE;
-        byte_no <= byte_no + 11'd1;
-        end        
-      endcase
+	ST_PAYLOAD:
+	begin  
+		//end of payload, ignore the ethernet crc that follows
+		if (byte_no == packet_len) state <= ST_DONE;
+		byte_no <= byte_no + 11'd1;
+	end        
+    endcase
       
   else //!rx_enable 
     state <= IDLE;
-    
-  
-  
+
+
 endmodule	

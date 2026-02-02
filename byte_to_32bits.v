@@ -41,6 +41,7 @@ module byte_to_32bits
 			( 	input clock,
 				input run,
 				input [15:0]to_port,
+				input [15:0]Rx_Audio_port,
 				input udp_rx_active,
 				input [7:0] udp_rx_data,
 				input full,
@@ -49,7 +50,6 @@ module byte_to_32bits
 				output reg [31:0] sequence_errors
 			);
 
-parameter [15:0] port; 	
 
 localparam IDLE = 1'd0, PROCESS = 1'd1;
 			
@@ -68,7 +68,7 @@ begin
 case (main)
 	IDLE:
 	begin
-		if (udp_rx_active && run && to_port == port) begin
+		if (udp_rx_active && run && to_port == Rx_Audio_port) begin // default port is 1028
 			sequence_number[31:24] <= udp_rx_data;
 			byte_counter <= 0;
 			byte_number <= 0;

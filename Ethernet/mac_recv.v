@@ -37,8 +37,8 @@ module mac_recv (
   output            active    ,
   output reg        broadcast ,
   output reg        is_arp    ,
-  output     [47:0] remote_mac,
-  output            remote_mac_valid
+  output reg [47:0] remote_mac,
+  output reg        remote_mac_valid
 );
 
 

@@ -46,7 +46,8 @@ module sdr_receive(
 	output EPCS_FIFO_enable,				// set when we write to the EPCS fifo
 	output reg set_ip,						// set when new static IP address available 
 	output reg [31:0] assign_ip,			// static IP address to save in EEPROM.
-	output reg [31:0] sequence_number	// sequence number from PC when programming.
+	output reg [31:0] sequence_number,	// sequence number from PC when programming.
+	output reg nconfig						// permit to reset the FPGA from remote
 );
 
 
@@ -68,7 +69,8 @@ localparam
 	ST_TX		= 12'd16,
 	ST_ERASE	= 12'd32,
 	ST_PROGRAM_FIFO = 12'd64,
-	ST_WAIT		= 12'd128;
+	ST_WAIT		= 12'd128,
+	ST_RESET        = 12'd256;
 
 // ****** NOTE: This state machine only runs when udp_rx_active ******	
 
@@ -94,10 +96,12 @@ begin
 					2: sequence_number[7:0]    <= udp_rx_data;
 					3: begin 
 						case (udp_rx_data)				// get command 
-							2: state <= ST_DISCOVERY;		// allow Discovery to this address or broadcast 
+							// allow Discovery to this address or broadcast
+							2: state <= ST_DISCOVERY;
 							3: if (broadcast)  state <= ST_SETIP; 
 							4: if (!broadcast) state <= ST_ERASE;
 							5: if (!broadcast) state <= ST_PROGRAM_FIFO;
+							6: if (!broadcast) state <= ST_RESET;           // reset the FPGA; useful to enter into the bootloader
 							default: state <= ST_WAIT;		// command not for us so wait for this to end
 						endcase
 					end
@@ -152,6 +156,7 @@ begin
 				byte_cnt <= byte_cnt + 9'd1;
 			end
 	
+		ST_RESET: nconfig <= 1'b1;													// reset the FPGA immediatelty
 		// wait for the end of sending
 		ST_TX:  if (!sending_sync) state <= ST_IDLE;
 		
@@ -166,12 +171,11 @@ begin
 	
 end 
 
-//	assign discovery_reply = (state == ST_DISCOVERY);
    assign EPCS_FIFO_enable = (byte_cnt > 8 && byte_cnt < 265);   // enable 256 bytes to EPCS fifo
 
 
 // Code to erase EPCS fifo. Needs separate state machine since above code only runs when udp_rx_active	
-reg [2:0] EPCS_state;	
+reg EPCS_state;	
 reg [26:0]delay;
 always @ (posedge  rx_clock)  
 begin
@@ -185,7 +189,7 @@ begin
 	end 
 
 	1: begin 								
-		if (erase_ACK | delay == 27'd0) begin  // time out ACK so we don't get stuck here. 
+		if (erase_ACK || delay == 27'd0) begin  // time out ACK so we don't get stuck here. 
 			erase <= 1'b0;
 			EPCS_state <= 0;
 		end
@@ -197,7 +201,7 @@ end
 	
 // wait for acknowledgement that sdr_send has seen the discovery reply request. 
 // Needs separate state machine since udb Rx code only runs when udp_rx_active			
-reg [2:0] DISC_state;	
+reg DISC_state;	
 reg [26:0]delay1;
 always @ (posedge rx_clock)  
 begin
@@ -211,7 +215,7 @@ begin
 	end 
 
 	1: begin 								
-		if (discovery_ACK | delay1 == 27'd0) begin  // time out ACK so we don't get stuck here. 
+		if (discovery_ACK || delay1 == 27'd0) begin  // time out ACK so we don't get stuck here. 
 			discovery_reply <= 1'b0;
 			DISC_state <= 0;
 		end

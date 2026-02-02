@@ -81,6 +81,7 @@ module High_Priority_CC
 				input udp_rx_active,
 				input [7:0] udp_rx_data,
 				input HW_timeout,
+				input [15:0] High_Priority_from_PC_port,
 				output reg run,
 				output reg PC_PTT,
 				output reg CWX,
@@ -102,7 +103,6 @@ module High_Priority_CC
 				output reg  [7:0]DLE_outputs  // XVTR_enable & IO1 output
 			);
 			
-parameter port = 16'd1027;	
 parameter NR;
 
 localparam 
@@ -125,7 +125,7 @@ generate
 for (i=0; i<NR; i=i+1) begin : rxloop
 	always @(posedge clock)
 	begin
-		if (udp_rx_active && to_port == port)	// look for to_port = 1027
+		if (udp_rx_active && to_port == High_Priority_from_PC_port)	// default port is 1027
 			case (state)
 				PROCESS:
 				case (byte_number)
@@ -151,7 +151,7 @@ begin
 	   PC_PTT <= 1'b0;
 	end
 
-  else if (udp_rx_active && to_port == port)	// look for to_port = 1027
+  else if (udp_rx_active && to_port == High_Priority_from_PC_port)	// default port is 1027
     case (state)
 		IDLE:
 			begin

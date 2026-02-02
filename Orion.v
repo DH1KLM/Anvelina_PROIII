@@ -602,6 +602,8 @@
 
 2025	Mar 12 - (N1GP) Added timings in phy_cfg.v to better support KSZ_9031 phy.
 
+2026	Jan 31 - (N1GP) Added ability to send discovery reply while in 'run' mode. Also added code to respect
+			the new ports sent to General_CC so applications don't have to use default ports.
 */
 
 module Orion(
@@ -659,7 +661,7 @@ module Orion(
   input  PHY_RX_CLOCK,           //PHY Rx data clock
   input  PHY_CLK125,             //125MHz clock from PHY PLL
   input  PHY_INT_N,              //interrupt (n.c.)
-  input  PHY_RESET_N,
+  output PHY_RESET_N,
   input  CLOCK_25MHZ,              //25MHz clock (n.c.)  
   
 	//phy mdio (KSZ9021RL)
@@ -811,7 +813,7 @@ assign SHDN_2 = 1'b0;
 
 assign atu_ctrl = run ? AUTO_TUNE : 1'b0;		// high turns on auto-tune for 7/8000DLE
 
-assign NCONFIG = IP_write_done || reset_FPGA;
+assign NCONFIG = IP_write_done || reset_FPGA || cmd_RESET;
 
 
 initial DRIVER_PA_EN = 1'b0;					// ensure PA bias is OFF initially
@@ -830,7 +832,7 @@ parameter IF_TPD  = 2;
 
 localparam board_type = 8'h05;		  	// 00 for Metis, 01 for Hermes, 02 for Griffin, 03 for Angelia, and 05 for Orion
 parameter  Orion_version = 8'd22;			// FPGA code version
-parameter  beta_version = 8'd7;	// Should be 0 for official release
+parameter  beta_version = 8'd9;	// Should be 0 for official release
 parameter  protocol_version = 8'd44;	// openHPSDR protocol version implemented
 
 //--------------------------------------------------------------
@@ -843,18 +845,18 @@ wire C122_rst;
 //wire SPI_clk;
 	
 assign IF_rst = !network_state;  // hold code in reset until Ethernet code is running.
-//assign PHY_RESET_N = 1'b1;
+assign PHY_RESET_N = 1'b1;
 
 // transfer IF_rst to 122.88MHz clock domain to generate C122_rst
 cdc_sync #(1)
-	reset_C122 (.siga(IF_rst), .rstb(0), .clkb(C122_clk), .sigb(C122_rst)); // 122.88MHz clock domain reset
+	reset_C122 (.siga(IF_rst), .rstb(IF_rst), .clkb(C122_clk), .sigb(C122_rst)); // 122.88MHz clock domain reset
 
 // ***RRK I dont think PHY_RESET_N can be used as an input (blocking diode)!
 // PHY_RESET_N will go high after ~100ms due to RC, use to create Alex reset pulse
-pulsegen reset_Alex  (.sig(PHY_RESET_N), .rst(0), .clk(CBCLK), .pulse(SPI_Alex_rst));
+//pulsegen reset_Alex  (.sig(PHY_RESET_N), .rst(0), .clk(CBCLK), .pulse(SPI_Alex_rst));
 
-//cdc_sync #(1)
-//	reset_Alex (.siga(run), .rstb(0), .clkb(CBCLK), .sigb(SPI_Alex_rst));  // SPI_clk domain reset
+cdc_sync #(1)
+	reset_Alex (.siga(IF_rst), .rstb(IF_rst), .clkb(CBCLK), .sigb(SPI_Alex_rst));  // SPI_clk domain reset
 	
 // Deadman timer - clears run if HW_timer_enable and no C&C commands received for ~2 seconds.
 
@@ -920,15 +922,18 @@ wire dhcp_timeout;
 wire dhcp_success;
 wire icmp_rx_enable;
 reg is_9031;
+reg disc_run_enable;
 
 network network_inst (
 
 		// inputs
+  .run(run),
   .udp_tx_request(udp_tx_request),
   .udp_tx_data(udp_tx_data),  
   .set_ip(set_ip),
   .assign_ip(assign_ip),
-  .port_ID(port_ID), 
+  .sdr_send_port(sdr_send_port), 
+  .disc_run_enable(disc_run_enable), 
   
   // outputs
   .clock_12_5MHz(clock_12_5MHz),
@@ -1010,7 +1015,8 @@ sdr_receive sdr_receive_inst(
 	.EPCS_FIFO_enable(EPCS_FIFO_enable),
 	.set_ip(set_ip),
 	.assign_ip(assign_ip),
-	.sequence_number(PC_seq_number)
+	.sequence_number(PC_seq_number),
+	.nconfig(cmd_RESET)
 	);
 			        
 
@@ -1036,7 +1042,7 @@ sync sync_inst7(.clock(tx_clock), .sig_in(wideband), .sig_out(wideband_sync));
 //                          sdr send
 //-----------------------------------------------------------------------------
 
-wire [7:0] port_ID;
+wire [15:0]sdr_send_port;
 wire [7:0]Mic_data;
 wire mic_fifo_rdreq;
 wire [8:0]Rx_data[0:NR-1];
@@ -1068,10 +1074,15 @@ sdr_send #(board_type, NR, master_clock, protocol_version) sdr_send_inst(
 	.sequence_number(PC_seq_number),		// sequence number to send when programming and requesting more data
 	//.samples_per_frame(samples_per_frame),
 	//.tx_length(tx_length),
-	.Wideband_packets_per_frame(Wideband_packets_per_frame),  
 	.checksum(checksum),  
+	.High_Priority_to_PC_port(High_Priority_to_PC_port),			
+	.Rx0_port(Rx0_port),
+	.Mic_port(Mic_port),
+	.Wideband_ADC0_port(Wideband_ADC0_port),
+	.Wideband_packets_per_frame(Wideband_packets_per_frame),  
 	
 	//outputs
+	.disc_run_enable(disc_run_enable),
 	.udp_tx_data(udp_tx_data),
 	.udp_tx_length(udp_tx_length),
 	.udp_tx_request(udp_tx_request),
@@ -1079,7 +1090,7 @@ sdr_send #(board_type, NR, master_clock, protocol_version) sdr_send_inst(
 	.sp_fifo_rdreq	(sp_fifo_rdreq	),		// high to indicate read from spectrum fifo required
 	.erase_done_ACK(erase_done_ACK),		
 	.send_more_ACK(send_more_ACK),
-	.port_ID(port_ID),
+	.sdr_send_port(sdr_send_port),
 	.mic_fifo_rdreq(mic_fifo_rdreq),		// high to indicate read from mic fifo required
 	.CC_ack(CC_ack),							// ack to CC_encoder that send request received
 	.WB_ack(WB_ack),							// ack to WB controller that send request received	
@@ -1381,8 +1392,8 @@ Rx_Audio_fifo Rx_Audio_fifo_inst(.wrclk (rx_clock),.rdreq (get_audio_samples),.r
 			.rdusedw(Rx_Audio_Used), .data (audio_data),.q (LR_data), .aclr(IF_rst | !run), .wrfull(Audio_full), .rdempty(Audio_empty));
 					 
 // Manage Rx Audio data to feed to Audio FIFO  - parameter is port #
-byte_to_32bits #(1028) Audio_byte_to_32bits_inst
-			(.clock(rx_clock), .run(run), .udp_rx_active(udp_rx_active), .udp_rx_data(udp_rx_data), .to_port(to_port),
+byte_to_32bits Audio_byte_to_32bits_inst
+			(.clock(rx_clock), .run(run), .udp_rx_active(udp_rx_active), .udp_rx_data(udp_rx_data), .to_port(to_port), .Rx_Audio_port(Rx_Audio_port),
 			 .fifo_wrreq(Rx_Audio_fifo_wrreq), .data_out(audio_data), .sequence_errors(Audio_sequence_errors), .full(Audio_full));
 			
 // select sidetone when CW key active and sidetone_level is not zero else Rx audio.
@@ -1475,8 +1486,8 @@ Tx1_IQ_fifo Tx1_IQ_fifo_inst(.wrclk (rx_clock),.rdreq (req1),.rdclk (C122_clk),.
 					 .data (Tx1_IQ_data), .q(C122_IQ1_data), .aclr(!run | IF_rst), .wrusedw(write_used));
 					 
 // Manage Tx I&Q data to feed to Tx  - parameter is port #
-byte_to_48bits #(1029) IQ_byte_to_48bits_inst
-			(.clock(rx_clock), .run(run), .udp_rx_active(udp_rx_active), .udp_rx_data(udp_rx_data), .to_port(to_port),
+byte_to_48bits IQ_byte_to_48bits_inst(.clock(rx_clock), .run(run),
+			.udp_rx_active(udp_rx_active), .udp_rx_data(udp_rx_data), .to_port(to_port), .Tx_IQ_port(Tx_IQ_port),
 			 .fifo_wrreq(Tx1_fifo_wrreq), .data_out(Tx1_IQ_data), .full(1'b0), .sequence_errors(DUC_sequence_errors));
 
 // Ensure I&Q data is zero if not transmitting
@@ -1533,6 +1544,7 @@ wire busy;				 // drives LED
 wire erase_done;
 wire erase_done_ACK;
 wire reset_FPGA;
+wire cmd_RESET;
 
 ASMI_interface  ASMI_int_inst(.clock(clock_12_5MHz), .busy(busy), .erase(erase), .erase_ACK(erase_ACK), .IF_PHY_data(EPCS_data), .EPCS_flash(MODE2),
 					 .IF_Rx_used(EPCS_Rx_used), .rdreq(EPCS_rdreq), .erase_done(erase_done), .num_blocks(num_blocks), .checksum(checksum),
@@ -1927,8 +1939,8 @@ wire 	 [7:0] EnableRx0_7;			// Rx enabled when bit set, [0] = Rx0, [1] = Rx1 etc
 wire 	 [7:0] C122_EnableRx0_7;
 wire  [15:0] Rx_Specific_port;	// 
 wire  [15:0] Tx_Specific_port;
-wire  [15:0] High_Prioirty_from_PC_port;
-wire  [15:0] High_Prioirty_to_PC_port;			
+wire  [15:0] High_Priority_from_PC_port;
+wire  [15:0] High_Priority_to_PC_port;			
 wire  [15:0] Rx_Audio_port;
 wire  [15:0] Tx_IQ_port;
 wire  [15:0] Rx0_port;
@@ -1980,8 +1992,8 @@ General_CC #(1024) General_CC_inst // parameter is port number  ***** this data 
 				// outputs
 			   .Rx_Specific_port(Rx_Specific_port),
 				.Tx_Specific_port(Tx_Specific_port),
-				.High_Prioirty_from_PC_port(High_Prioirty_from_PC_port),
-				.High_Prioirty_to_PC_port(High_Prioirty_to_PC_port),			
+				.High_Priority_from_PC_port(High_Priority_from_PC_port),
+				.High_Priority_to_PC_port(High_Priority_to_PC_port),			
 				.Rx_Audio_port(Rx_Audio_port),
 				.Tx_IQ_port(Tx_IQ_port),
 				.Rx0_port(Rx0_port),
@@ -2008,7 +2020,7 @@ General_CC #(1024) General_CC_inst // parameter is port number  ***** this data 
 				);
 
 
-High_Priority_CC #(1027, NR) High_Priority_CC_inst  // parameter is port number 1027  ***** this data is in rx_clock domain *****
+High_Priority_CC #(NR) High_Priority_CC_inst  // default port is 1027 ***** this data is in rx_clock domain *****
 			(
 				// inputs
 				.clock(rx_clock),
@@ -2016,6 +2028,7 @@ High_Priority_CC #(1027, NR) High_Priority_CC_inst  // parameter is port number 
 				.udp_rx_active(udp_rx_active),
 				.udp_rx_data(udp_rx_data),
 				.HW_timeout(HW_timeout),					// used to clear run if HW timeout.
+				.High_Priority_from_PC_port(High_Priority_from_PC_port),
 				// outputs
 				.run(run),
 				.PC_PTT(PC_PTT),
@@ -2064,13 +2077,14 @@ wire [15:0] Alex_upper = (FPGA_PTT && Alex_Tx_data_ok) ? Alex_Tx_data : Alex_dat
 wire [47:0]runsafe_Alex_data = {Alex_upper[15:12], run & PA_enable & (FPGA_PTT | Alex_upper[11]),
                                                              Alex_upper[10:0], Alex_data[31:0]};
 
-Tx_specific_CC #(1026)Tx_specific_CC_inst //   // parameter is port number  ***** this data is in rx_clock domain *****
+Tx_specific_CC Tx_specific_CC_inst //   // default port number is 1026 ***** this data is in rx_clock domain *****
 			( 	
 				// inputs
 				.clock (rx_clock),
 				.to_port (to_port),
 				.udp_rx_active (udp_rx_active),
 				.udp_rx_data (udp_rx_data),
+				.Tx_Specific_port (Tx_Specific_port),
 				// outputs
 				.EER() ,
 				.internal_CW (internal_CW),
@@ -2099,10 +2113,11 @@ Tx_specific_CC #(1026)Tx_specific_CC_inst //   // parameter is port number  ****
 
 			);
 
-Rx_specific_CC #(1025, NR) Rx_specific_CC_inst // parameter is port number 
+Rx_specific_CC #(NR) Rx_specific_CC_inst // default port number is 1025 
 			( 	
 				// inputs
 				.clock(rx_clock),
+				.Rx_Specific_port(Rx_Specific_port),
 				.to_port(to_port),
 				.udp_rx_active(udp_rx_active),
 				.udp_rx_data(udp_rx_data),

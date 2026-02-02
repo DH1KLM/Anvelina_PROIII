@@ -1,5 +1,5 @@
 Flow report for Orion
-Tue Apr  8 17:35:38 2025
+Mon Feb  2 13:14:32 2026
 Quartus Prime Version 20.1.1 Build 720 11/11/2020 SJ Lite Edition
 
 
@@ -41,20 +41,20 @@ https://fpgasoftware.intel.com/eula.
 +----------------------------------------------------------------------------------+
 ; Flow Summary                                                                     ;
 +------------------------------------+---------------------------------------------+
-; Flow Status                        ; Successful - Tue Apr  8 17:34:58 2025       ;
+; Flow Status                        ; Successful - Mon Feb  2 13:14:04 2026       ;
 ; Quartus Prime Version              ; 20.1.1 Build 720 11/11/2020 SJ Lite Edition ;
 ; Revision Name                      ; Orion                                       ;
 ; Top-level Entity Name              ; Orion                                       ;
 ; Family                             ; Cyclone IV E                                ;
 ; Device                             ; EP4CE115F29I7                               ;
 ; Timing Models                      ; Final                                       ;
-; Total logic elements               ; 92,780 / 114,480 ( 81 % )                   ;
-;     Total combinational functions  ; 71,792 / 114,480 ( 63 % )                   ;
-;     Dedicated logic registers      ; 74,944 / 114,480 ( 65 % )                   ;
-; Total registers                    ; 74954                                       ;
+; Total logic elements               ; 92,880 / 114,480 ( 81 % )                   ;
+;     Total combinational functions  ; 71,959 / 114,480 ( 63 % )                   ;
+;     Dedicated logic registers      ; 75,122 / 114,480 ( 66 % )                   ;
+; Total registers                    ; 75132                                       ;
 ; Total pins                         ; 185 / 529 ( 35 % )                          ;
 ; Total virtual pins                 ; 0                                           ;
-; Total memory bits                  ; 1,229,984 / 3,981,312 ( 31 % )              ;
+; Total memory bits                  ; 1,229,696 / 3,981,312 ( 31 % )              ;
 ; Embedded Multiplier 9-bit elements ; 298 / 532 ( 56 % )                          ;
 ; Total PLLs                         ; 4 / 4 ( 100 % )                             ;
 +------------------------------------+---------------------------------------------+
@@ -65,7 +65,7 @@ https://fpgasoftware.intel.com/eula.
 +-------------------+---------------------+
 ; Option            ; Setting             ;
 +-------------------+---------------------+
-; Start date & time ; 04/08/2025 17:12:40 ;
+; Start date & time ; 02/02/2026 13:00:10 ;
 ; Main task         ; Compilation         ;
 ; Revision Name     ; Orion               ;
 +-------------------+---------------------+
@@ -80,7 +80,7 @@ https://fpgasoftware.intel.com/eula.
 ; ALLOW_POWER_UP_DONT_CARE                ; Off                                    ; On                 ; --          ; --         ;
 ; ALLOW_REGISTER_RETIMING                 ; Off                                    ; On                 ; --          ; --         ;
 ; AUTO_MERGE_PLLS                         ; Off                                    ; On                 ; --          ; --         ;
-; COMPILER_SIGNATURE_ID                   ; 26601950300764.174414676033547         ; --                 ; --          ; --         ;
+; COMPILER_SIGNATURE_ID                   ; 26601950300764.177005521028160         ; --                 ; --          ; --         ;
 ; FITTER_AUTO_EFFORT_DESIRED_SLACK_MARGIN ; 1 ns                                   ; 0 ns               ; --          ; --         ;
 ; MAX_CORE_JUNCTION_TEMP                  ; 100                                    ; --                 ; --          ; --         ;
 ; MIN_CORE_JUNCTION_TEMP                  ; -40                                    ; --                 ; --          ; --         ;
@@ -121,11 +121,11 @@ https://fpgasoftware.intel.com/eula.
 +----------------------+--------------+-------------------------+---------------------+------------------------------------+
 ; Module Name          ; Elapsed Time ; Average Processors Used ; Peak Virtual Memory ; Total CPU Time (on all processors) ;
 +----------------------+--------------+-------------------------+---------------------+------------------------------------+
-; Analysis & Synthesis ; 00:03:35     ; 1.1                     ; 1633 MB             ; 00:03:55                           ;
-; Fitter               ; 00:17:43     ; 1.4                     ; 4443 MB             ; 01:48:51                           ;
-; Assembler            ; 00:00:29     ; 1.2                     ; 1280 MB             ; 00:00:28                           ;
-; Timing Analyzer      ; 00:00:39     ; 2.2                     ; 1725 MB             ; 00:01:06                           ;
-; Total                ; 00:22:26     ; --                      ; --                  ; 01:54:20                           ;
+; Analysis & Synthesis ; 00:02:28     ; 1.1                     ; 1636 MB             ; 00:02:38                           ;
+; Fitter               ; 00:10:47     ; 1.5                     ; 4368 MB             ; 01:03:17                           ;
+; Assembler            ; 00:00:19     ; 1.3                     ; 1282 MB             ; 00:00:18                           ;
+; Timing Analyzer      ; 00:00:27     ; 2.1                     ; 1734 MB             ; 00:00:46                           ;
+; Total                ; 00:14:01     ; --                      ; --                  ; 01:06:59                           ;
 +----------------------+--------------+-------------------------+---------------------+------------------------------------+
 
 

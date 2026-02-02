@@ -94,6 +94,7 @@ module Tx_specific_CC
 				input [15:0] to_port,
 				input udp_rx_active,
 				input [7:0] udp_rx_data,
+				input [15:0] Tx_Specific_port,
 				output reg EER,
 				output reg internal_CW,
 				output reg key_reverse, 
@@ -121,7 +122,6 @@ module Tx_specific_CC
 
 			);
 			
-parameter port = 16'd1026; 			
 
 localparam 
 				IDLE = 1'd0,
@@ -129,16 +129,13 @@ localparam
 			
 reg [31:0] CC_sequence_number;
 reg [10:0] byte_number;
-reg [31:0] temp_Rx1_frequency;
-reg [31:0] temp_Rx2_frequency;
-reg [31:0] temp_Tx1_frequency;
 
 reg state;
 
 			
 always @(posedge clock)
 begin
-  if (udp_rx_active && to_port == port)				// look for to_port = 1026
+  if (udp_rx_active && to_port == Tx_Specific_port)				// default port is 1026
     case (state)
       IDLE:	
 				begin

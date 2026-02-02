@@ -46,8 +46,8 @@ module General_CC
 				input [7:0] udp_rx_data,
 				output reg [15:0] Rx_Specific_port,
 				output reg [15:0] Tx_Specific_port,
-				output reg [15:0] High_Prioirty_from_PC_port,
-				output reg [15:0] High_Prioirty_to_PC_port,			
+				output reg [15:0] High_Priority_from_PC_port,
+				output reg [15:0] High_Priority_to_PC_port,			
 				output reg [15:0] Rx_Audio_port,
 				output reg [15:0] Tx_IQ_port,
 				output reg [15:0] Rx0_port,
@@ -104,24 +104,24 @@ begin
 					   //2: CC_sequence_number[15:8] <= udp_rx_data; 				
 					   //3: CC_sequence_number[7:0] <= udp_rx_data; 				
 					   4: if (udp_rx_data != 8'd0) state <= END;	// not for this module	
-					   5: Rx_Specific_port[15:8] <= udp_rx_data;
-					   6: Rx_Specific_port [7:0] <= udp_rx_data;
-					   7: Tx_Specific_port[15:8] <= udp_rx_data;
-					   8: Tx_Specific_port [7:0] <= udp_rx_data;
-					   9: High_Prioirty_from_PC_port[15:8] <= udp_rx_data;
-					  10: High_Prioirty_from_PC_port [7:0] <= udp_rx_data;
-					  11: High_Prioirty_to_PC_port[15:8] <= udp_rx_data;
-					  12: High_Prioirty_to_PC_port [7:0] <= udp_rx_data;
-					  13: Rx_Audio_port[15:8] <= udp_rx_data;
-					  14: Rx_Audio_port [7:0] <= udp_rx_data;
-					  15: Tx_IQ_port[15:8] <= udp_rx_data;
-					  16: Tx_IQ_port [7:0] <= udp_rx_data;		
-					  17: Rx0_port[15:8] <= udp_rx_data;
-					  18: Rx0_port [7:0] <= udp_rx_data;
-					  19: Mic_port[15:8] <= udp_rx_data;
-					  20: Mic_port [7:0] <= udp_rx_data;
-					  21: Wideband_ADC0_port[15:8] <= udp_rx_data;
-					  22: Wideband_ADC0_port [7:0] <= udp_rx_data;
+					   5: Rx_Specific_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1025
+					   6: Rx_Specific_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h01;
+					   7: Tx_Specific_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1026
+					   8: Tx_Specific_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h02;
+					   9: High_Priority_from_PC_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1027
+					  10: High_Priority_from_PC_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h03;
+					  11: High_Priority_to_PC_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1025
+					  12: High_Priority_to_PC_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h01;
+					  13: Rx_Audio_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1028
+					  14: Rx_Audio_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h04;
+					  15: Tx_IQ_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1029
+					  16: Tx_IQ_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h05;
+					  17: Rx0_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1035
+					  18: Rx0_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h0B;
+					  19: Mic_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1026
+					  20: Mic_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h02;
+					  21: Wideband_ADC0_port[15:8] <= udp_rx_data ? udp_rx_data : 8'h04; // 1027
+					  22: Wideband_ADC0_port [7:0] <= udp_rx_data ? udp_rx_data : 8'h03;
 					  23: Wideband_enable <= udp_rx_data;
 					  24: Wideband_samples_per_packet[15:8] <= udp_rx_data;
 					  25: Wideband_samples_per_packet [7:0] <= udp_rx_data;
@@ -157,7 +157,7 @@ begin
 		  
 			   byte_number <= byte_number + 8'd1;
 			end
-		END: state <= IDLE;
+		END: if (!udp_rx_active) state <= IDLE;   // command not for us so loop until it ends.
 		default: state <= IDLE;
 		endcase 
 	else state <= IDLE;	

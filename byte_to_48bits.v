@@ -51,6 +51,7 @@ module byte_to_48bits
 			( 	input clock,
 				input run,
 				input [15:0]to_port,
+				input [15:0]Tx_IQ_port,
 				input udp_rx_active,
 				input [7:0] udp_rx_data,
 				input full,
@@ -59,7 +60,6 @@ module byte_to_48bits
 				output reg [31:0] sequence_errors
 			);
 
-parameter [15:0] port; 
 
 localparam IDLE = 1'd0, PROCESS = 1'd1;
 	
@@ -77,7 +77,7 @@ always @(posedge clock) begin
 
 case (main)
 	IDLE:	begin 
-				if (udp_rx_active && run && to_port == port) begin
+				if (udp_rx_active && run && to_port == Tx_IQ_port) begin // default port is 1029
 					sequence_number[31:24] <= udp_rx_data;
 					byte_counter <= 0;
 					byte_number <= 0;

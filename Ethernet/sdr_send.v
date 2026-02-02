@@ -49,8 +49,13 @@ module sdr_send(
 	//input [15:0]samples_per_frame[0:NR-1],	
 	//input [15:0]tx_length[0:NR-1],		// length of the UDP packet, varies with number of sync or mux receivers.
         input [15:0] checksum,
-	input [7:0] Wideband_packets_per_frame,  // 
+	input [15:0] High_Priority_to_PC_port,
+	input [15:0] Rx0_port,
+	input [15:0] Mic_port,
+	input [15:0] Wideband_ADC0_port,
+	input [7:0] Wideband_packets_per_frame,
 	
+	output reg disc_run_enable,
 	output reg udp_tx_request,
 	output [7:0] udp_tx_data,
 	output reg [15:0] udp_tx_length,
@@ -59,7 +64,7 @@ module sdr_send(
 	output reg mic_fifo_rdreq,			// high to indicate read from mic fifo required
 	output reg send_more_ACK,
 	output reg erase_done_ACK,
-	output reg [7:0] port_ID,
+	output reg [15:0] sdr_send_port,
 	output reg CC_ack,
 	output reg WB_ack,
 	output reg phy_ready,				// this set when no DDC data is being sent. Used when changing modes for PureSignal
@@ -139,10 +144,11 @@ always @(posedge tx_clock)
   case (state)
 		IDLE: 
 			begin
+				disc_run_enable <= 1'b0;
 				udp_tx_request <= 1'b0;
 				send_response <= 1'b0;
 				byte_no <= 16'd0; 
-				port_ID <= 8'd0;										// set base to 1024
+				sdr_send_port <= 16'd0;										// set base to 1024
 				sp_fifo_rdreq <= 1'b0;
 				mic_fifo_rdreq <= 1'b0;
 				udp_tx_length <= 16'd0;
@@ -162,9 +168,10 @@ always @(posedge tx_clock)
 				// *** NOTE: can reply to Discovery if already running *****	
 				if (discovery) begin
 					// sequence number set to zero for future use
-					response_tx_bits <= {32'd0, (8'd02 + {7'b0,run}), local_mac, board_type, protocol_version, code_version, 48'd0, number_Rx, 8'd1,
-						8'd0, beta_version};
+					response_tx_bits <= {32'd0, (8'd02 + {7'b0,run}), local_mac, board_type, protocol_version,
+							code_version, 48'd0, number_Rx, 8'd1, 8'd0, beta_version};
 					state <= response;			// **** change HEADER_LENGTH when making changes here ****
+					if (run) disc_run_enable <= 1'b1;
 				end 
 				
 				else if (erase_done) begin
@@ -187,14 +194,12 @@ always @(posedge tx_clock)
 				begin 				
 					if (port_index == NR) begin	// send wideband data only when all  DDC data has been sent 
 						port_index <= 8'd0;
-						if (wideband && send_wb_block)
-						begin 
+						if (wideband && send_wb_block) begin 
 							state <= WIDEBAND;
 						end 
 					end 
 					else begin
-						if (fifo_ready[port_index])
-						begin
+						if (fifo_ready[port_index]) begin
 							//udp_tx_length <= tx_length[port_index]; //PC_LENGTH + (samples_per_frame[k] * 16'd6) + 12;			
 							//udp_tx_length <= 16'd1444;
 							//port_ID <= 8'd11 + port_index;		// set from_port to base + j i.e. 1035 + j
@@ -229,7 +234,7 @@ always @(posedge tx_clock)
 			begin 
 				udp_tx_length <= 16'd56 + PC_LENGTH; //16'd60 + PC_LENGTH;	//60 bytes of CC_data includes 4 bytes of seq number			
 				udp_tx_request <= 1'b1;	
-				port_ID <= 8'd1;			// set from_port to base + 1 i.e. 1025
+				sdr_send_port <= High_Priority_to_PC_port;
 				CC_ack <= 1'b1;				// ACK we have seen the request 
 				if (udp_tx_enable) begin
 					tx_data <= CC_seq_number[31:24]; // ***** first byte gets loaded here as soon as udp_tx_enable is set !!!!! 
@@ -264,7 +269,7 @@ always @(posedge tx_clock)
 			begin
 				udp_tx_length <= 16'd1024 + PC_LENGTH;				
 				udp_tx_request <= 1'b1;	
-				port_ID <= 8'd3;			// set from_port to base + 3 i.e. 1027
+				sdr_send_port <= Wideband_ADC0_port;
 				WB_ack <= 1'b1; 			// ACK that we have seen the request
 				if (udp_tx_enable) begin
 					if (wideband_count == (Wideband_packets_per_frame - 8'd1)) begin 
@@ -310,7 +315,7 @@ always @(posedge tx_clock)
 		RX_SEND:
 			begin
 				udp_tx_length <= 16'd1444;
-				port_ID <= 8'd11 + select;		// set from_port to base + j i.e. 1035 + j
+				sdr_send_port <= Rx0_port + select;
 				samples_frame <= 16'd238;
 				udp_tx_request <= 1'b1;
 				if (udp_tx_enable) begin
@@ -374,7 +379,7 @@ always @(posedge tx_clock)
 			begin 
 				udp_tx_length <= 16'd128 + PC_LENGTH;	// was 1440 			
 				udp_tx_request <= 1'b1;	
-				port_ID <= 8'd2;				// set from_port to base + 2 i.e. 1026
+				sdr_send_port <= Mic_port;
 				if (udp_tx_enable) begin
 					tx_data <= mic_seq_number[31:24]; 	// ***** first byte gets loaded here as soon as udp_tx_enable is set !!!!! 
 					state <= MIC_SEND_2; 
