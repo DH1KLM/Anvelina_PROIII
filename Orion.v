@@ -604,6 +604,9 @@
 
 2026	Jan 31 - (N1GP) Added ability to send discovery reply while in 'run' mode. Also added code to respect
 			the new ports sent to General_CC so applications don't have to use default ports.
+
+2026	Feb 17 -(eu2av) An additional OC-collector group has been created [4:0]Open_Collector_Anvelina_DX
+           1397:	Open_Collector_Anvelina_DX 		  <=  udp_rx_data			
 */
 
 module Orion(
@@ -764,12 +767,12 @@ module Orion(
  
 	// RAM
   output wire RAM_A0,
-  output wire RAM_A1,
-  output wire RAM_A2,
+  //output wire RAM_A1,
+  //output wire RAM_A2,
   //output wire RAM_A3,
-  output wire RAM_A4,
-  output wire RAM_A5,
-  output wire RAM_A6,
+  //output wire RAM_A4,
+  //output wire RAM_A5,
+  //output wire RAM_A6,
   output wire RAM_A7,
   //output wire RAM_A8,
   //output wire RAM_A9,
@@ -786,18 +789,18 @@ assign USEROUT3 = run ? Open_Collector[4] : 1'b0;
 assign USEROUT4 = run ? Open_Collector[5] : 1'b0; 
 assign USEROUT5 = run ? Open_Collector[6] : 1'b0; 
 assign USEROUT6 = run ? Open_Collector[7] : 1'b0;
-assign USEROUT7 = run ? Open_Collector[8] : 1'b0; 
-assign USEROUT8 = run ? Open_Collector[9] : 1'b0; 
-assign USEROUT9 = run ? Open_Collector[10] : 1'b0;
-assign USEROUT10 = run ? Open_Collector[11] : 1'b0;  
+assign USEROUT7 = run ? Open_Collector_Anvelina_DX[1] : 1'b0; //Open_Collector_Anvelina_DX;
+assign USEROUT8 = run ? Open_Collector_Anvelina_DX[2] : 1'b0; 
+assign USEROUT9 = run ? Open_Collector_Anvelina_DX[3] : 1'b0;
+assign USEROUT10 = run ? Open_Collector_Anvelina_DX[4] : 1'b0;    
 
 assign RAM_A0  = 0;
-assign RAM_A1  = 0;
-assign RAM_A2  = 0;
+//assign RAM_A1  = 0;
+//assign RAM_A2  = 0;
 //assign RAM_A3  = 0;
-assign RAM_A4  = 0;
-assign RAM_A5  = 0;
-assign RAM_A6  = 0;
+//assign RAM_A4  = 0;
+//assign RAM_A5  = 0;
+//assign RAM_A6  = 0;
 assign RAM_A7  = 0;
 //assign RAM_A8  = 0;
 //assign RAM_A9  = 0;
@@ -1953,7 +1956,8 @@ wire   [7:0] Wideband_update_rate;
 wire   [7:0] Wideband_packets_per_frame; 
 wire  [15:0] Envelope_PWM_max;
 wire  [15:0] Envelope_PWM_min;
-wire   [11:0] Open_Collector; //Anvelina_ProIIIdx
+wire   [7:0] Open_Collector; 
+wire   [4:0] Open_Collector_Anvelina_DX; //Anvelina_ProIIIdx
 wire   [7:0] User_Outputs;
 wire   [7:0] Mercury_Attenuator;	
 wire 			 CWX;						// CW keyboard from PC 
@@ -2043,6 +2047,7 @@ High_Priority_CC #(NR) High_Priority_CC_inst  // default port is 1027 ***** this
 				.Attenuator0(Attenuator0),
 				.Attenuator1(Attenuator1),
 				.Open_Collector(Open_Collector),			// open collector outputs on Orion
+				.Open_Collector_Anvelina_DX(Open_Collector_Anvelina_DX),    //Open_Collector_Anvelina_DX
 			//	.User_Outputs(),
 			//	.Mercury_Attenuator(),	
 				.Alex_data_ready(Alex_data_ready),

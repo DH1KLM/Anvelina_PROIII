@@ -94,7 +94,8 @@ module High_Priority_CC
 				output reg  [7:0]drive_level,
 				output reg  [4:0]Attenuator0,
 				output reg  [4:0]Attenuator1,
-				output reg  [7:0]Open_Collector,
+				output reg  [7:0]Open_Collector,  // Orion 7:0 
+				output reg  [4:0]Open_Collector_Anvelina_DX, // Anvelina PRO3DX// 4:0
 				output reg  [7:0]User_Outputs,
 				output reg  [7:0]Mercury_Attenuator,				
 				output reg Alex_data_ready,
@@ -193,7 +194,8 @@ begin
 						 345: drive_level <= udp_rx_data;
 
 						1400:	DLE_outputs		  <=  udp_rx_data; // for ANAN-8000DLE (XVTR_enable & user IO1 output)
-						1401:	Open_Collector 		  <=  udp_rx_data;
+						1401:	Open_Collector 		  <=  udp_rx_data;    //Orion 1401
+						1397:	Open_Collector_Anvelina_DX 		  <=  udp_rx_data; // Anvelina_Pro3DX 1397
 						1402:	User_Outputs 			  <=  udp_rx_data;
 						1403:	Mercury_Attenuator     <=  udp_rx_data;	
 						
