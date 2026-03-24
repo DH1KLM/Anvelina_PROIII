@@ -44,7 +44,14 @@ Format changed to match Protocol Discussion paper 5 Dec 2014
 			30	34	Sequence Errors		[15:8]
 			31	35	Sequence Errors		[7:0]
 			
-			RAM 32 to 44 and Bytes 36 to 48 currently not used.
+			RAM 32 to 34 and Bytes 36 to 38 currently not used.
+
+			35	39	ADC0 max magnitude			[15:8]
+			36	40	ADC0 max magnitude			[7:0]
+			37	41	ADC1 max magnitude			[15:8]
+			38	42	ADC1 max magnitude			[7:0]
+
+			RAM 39 to 44 and Bytes 43 to 48 currently not used.
 
 			45	49	Supply Volts				[15:8]
 			46	50	Supply Volts				[7:0]
@@ -75,6 +82,8 @@ module CC_encoder (
 							input locked_10MHz,
 							input ADC0_overload,
 							input ADC1_overload,
+							input [15:0]ADC0_mag,
+							input [15:0]ADC1_mag,
 							input [15:0]Exciter_power,
 							input [15:0]FWD_power,
 							input [15:0]REV_power,
@@ -94,11 +103,12 @@ module CC_encoder (
 							);
 							
 
-parameter [24:0] update_rate = 25'd200; 					// number of mS between updates if no change in data	
 // move all C&C data to tx_clock domain
 
 reg ADC0_overload_send;
 reg ADC1_overload_send;
+reg [15:0] ADC0_peak;
+reg [15:0] ADC1_peak;
 reg [7:0] memory[0:56];    // 57 by 8 bit ram
 reg [7:0] temp[0:56];
 reg [7:0] previous[0:1];
@@ -159,15 +169,16 @@ end
 reg [1:0]  state = 0;
 reg [5:0]  count = 0;
 reg [24:0] counter = 0;
-reg [24:0]  rate;
 
-assign rate = FPGA_PTT ? 25'd1 : update_rate;   // if Txing then use 1mS update rate
+// if Txing or overload then use 1mS update rate, otherwise 200mS
+reg [24:0] rate;
+assign rate = (FPGA_PTT || ADC0_overload_send || ADC1_overload_send) ? 25'd125000 : 25'd25000000;
 
 always @ (posedge clock)	
 begin
-	if (counter >= (rate * 25'd125000)) begin	
+	if (counter >= rate) begin	
 		counter <= 25'd0;
-		if (state == 0) state <= 1;	  // no need to send data if its already in progress	
+		state <= 1;
 	end
 	else counter <= counter + 25'd1;
 
@@ -177,35 +188,45 @@ begin
 
 	case(state)	
 	0: begin 
-			// check for inputs that we report in real time
-			if ((memory[0] != previous[0]) || (memory[55] != previous[1])) begin 
-				CC_data[0]  <= memory[0];
-				CC_data[55] <= memory[55];
-				previous[0] <= memory[0];
-				previous[1] <= memory[55];
-				counter <= 0;							// no need to send a periodic update							
-				state <= 1;
-			end
-			else
-				for (count = 6'd0; count < 6'd56; count = count + 6'd1) // update all status (56 bytes)
-				if (count != 6'd1) CC_data[count] <= memory[count]; // skip overload bits
-		end 
-		
+		// get peak magnitudes
+		if(ADC0_mag > ADC0_peak) ADC0_peak <= ADC0_mag;
+		if(ADC1_mag > ADC1_peak) ADC1_peak <= ADC1_mag;
+
+		// check for inputs that we report in real time
+		if ((memory[0] != previous[0]) || (memory[55] != previous[1])) begin 
+			CC_data[0]  <= memory[0];
+			CC_data[55] <= memory[55];
+			previous[0] <= memory[0];
+			previous[1] <= memory[55];
+			counter <= 0;							// no need to send a periodic update							
+			state <= 1;
+		end
+		else
+			for (count = 6'd0; count < 6'd56; count = count + 6'd1) // update all status (56 bytes)
+				if (count != 6'd1 && (count < 6'd35 || count > 6'd38)) CC_data[count] <= memory[count]; // skip overload
+	end 
+
 	1: begin 
-			// send latched overloads
-			CC_data[1]  <=  {6'b0, ADC1_overload_send, ADC0_overload_send};
-			ready <= 1'b1;
-			if (ACK) begin 
-				ADC0_overload_send <= ADC0_overload;
-				ADC1_overload_send <= ADC1_overload;
-				pk_detect_reset <= 1'b1;	// signal Orion_ADC to begin new pk detect interval
-				counter <= 25'd0;
-				count <= 6'b0;
-				ready <= 1'b0;
-				state <= 0;
-			end
-			if (pk_detect_ack) pk_detect_reset <= 1'b0;  // clear pk detect reset once Orion_ADC receives interval reset signal
-		end 
+		// send latched overloads
+		CC_data[1]  <=  {6'b0, ADC1_overload_send, ADC0_overload_send};
+		CC_data[35]  <=  ADC0_peak[15:8];
+		CC_data[36]  <=  ADC0_peak[7:0];
+		CC_data[37]  <=  ADC1_peak[15:8];
+		CC_data[38]  <=  ADC1_peak[7:0];
+		ready <= 1'b1;
+		if (ACK) begin 
+			ADC0_overload_send <= ADC0_overload;
+			ADC1_overload_send <= ADC1_overload;
+			ADC0_peak <= 16'd0;
+			ADC1_peak <= 16'd0;
+			pk_detect_reset <= 1'b1;	// signal Orion_ADC to begin new pk detect interval
+			counter <= 25'd0;
+			count <= 6'b0;
+			ready <= 1'b0;
+			state <= 0;
+		end
+		if (pk_detect_ack) pk_detect_reset <= 1'b0;  // clear pk detect reset once Orion_ADC receives interval reset signal
+	end 
 
 default: state <= 0;
 endcase 

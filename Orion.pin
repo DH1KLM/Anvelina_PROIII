@@ -1,17 +1,17 @@
- -- Copyright (C) 2025  Altera Corporation. All rights reserved.
- -- Your use of Altera Corporation's design tools, logic functions 
+ -- Copyright (C) 2020  Intel Corporation. All rights reserved.
+ -- Your use of Intel Corporation's design tools, logic functions 
  -- and other software and tools, and any partner logic 
  -- functions, and any output files from any of the foregoing 
  -- (including device programming or simulation files), and any 
  -- associated documentation or information are expressly subject 
- -- to the terms and conditions of the Altera Program License 
- -- Subscription Agreement, the Altera Quartus Prime License Agreement,
- -- the Altera IP License Agreement, or other applicable license
+ -- to the terms and conditions of the Intel Program License 
+ -- Subscription Agreement, the Intel Quartus Prime License Agreement,
+ -- the Intel FPGA IP License Agreement, or other applicable license
  -- agreement, including, without limitation, that your use is for
  -- the sole purpose of programming logic devices manufactured by
- -- Altera and sold by Altera or its authorized distributors.  Please
- -- refer to the Altera Software License Subscription Agreements 
- -- on the Quartus Prime software download page.
+ -- Intel and sold by Intel or its authorized distributors.  Please
+ -- refer to the applicable agreement for further details, at
+ -- https://fpgasoftware.intel.com/eula.
  -- 
  -- This is a Quartus Prime output file. It is for reporting purposes only, and is
  -- not intended for use as a Quartus Prime input file. This file cannot be used
@@ -64,7 +64,7 @@
  -- Pin directions (input, output or bidir) are based on device operating in user mode.
  ---------------------------------------------------------------------------------
 
-Quartus Prime Version 24.1std.0 Build 1077 03/04/2025 SC Lite Edition
+Quartus Prime Version 20.1.1 Build 720 11/11/2020 SJ Lite Edition
 CHIP  "Orion"  ASSIGNED TO AN: EP4CE115F29I7
 
 Pin Name/Usage               : Location  : Dir.   : I/O Standard      : Voltage : I/O Bank  : User Assignment
@@ -125,10 +125,10 @@ GND                          : AA27      : gnd    :                   :         
 VCCIO5                       : AA28      : power  :                   : 3.3V    : 5         :                
 DEBUG_LED14                  : AB1       : output : 3.3-V LVTTL       :         : 2         : Y              
 RESERVED_INPUT               : AB2       :        :                   :         : 2         :                
-RAM_A7                       : AB3       : output : 3.3-V LVTTL       :         : 2         : N              
+RESERVED_INPUT               : AB3       :        :                   :         : 2         :                
 RESERVED_INPUT               : AB4       :        :                   :         : 2         :                
 DEBUG_LED11                  : AB5       : output : 3.3-V LVTTL       :         : 2         : Y              
-RESERVED_INPUT               : AB6       :        :                   :         : 2         :                
+RAM_A7                       : AB6       : output : 3.3-V LVTTL       :         : 2         : N              
 RESERVED_INPUT               : AB7       :        :                   :         : 3         :                
 RESERVED_INPUT               : AB8       :        :                   :         : 3         :                
 RESERVED_INPUT               : AB9       :        :                   :         : 3         :                
@@ -334,14 +334,14 @@ OSC_10MHZ                    : B14       : input  : 3.3-V LVTTL       :         
 _122MHz                      : B15       : input  : 3.3-V LVTTL       :         : 7         : Y              
 GND                          : B16       : gnd    :                   :         :           :                
 RESERVED_INPUT               : B17       :        :                   :         : 7         :                
-DEBUG_LED20                  : B18       : output : 3.3-V LVTTL       :         : 7         : Y              
+RESERVED_INPUT               : B18       :        :                   :         : 7         :                
 RESERVED_INPUT               : B19       :        :                   :         : 7         :                
 GND                          : B20       : gnd    :                   :         :           :                
 RESERVED_INPUT               : B21       :        :                   :         : 7         :                
 RESERVED_INPUT               : B22       :        :                   :         : 7         :                
 RESERVED_INPUT               : B23       :        :                   :         : 7         :                
 GND                          : B24       : gnd    :                   :         :           :                
-RESERVED_INPUT               : B25       :        :                   :         : 7         :                
+DEBUG_LED20                  : B25       : output : 3.3-V LVTTL       :         : 7         : Y              
 INA[0]                       : B26       : input  : 3.3-V LVTTL       :         : 7         : Y              
 GND                          : B27       : gnd    :                   :         :           :                
 VCCIO6                       : B28       : power  :                   : 3.3V    : 6         :                
@@ -351,7 +351,7 @@ RESERVED_INPUT               : C3        :        :                   :         
 MICBIAS_SELECT               : C4        : output : 3.3-V LVTTL       :         : 8         : Y              
 PTT_SELECT                   : C5        : output : 3.3-V LVTTL       :         : 8         : Y              
 RESERVED_INPUT               : C6        :        :                   :         : 8         :                
-RESERVED_INPUT               : C7        :        :                   :         : 8         :                
+RAM_A0                       : C7        : output : 3.3-V LVTTL       :         : 8         : N              
 RESERVED_INPUT               : C8        :        :                   :         : 8         :                
 RESERVED_INPUT               : C9        :        :                   :         : 8         :                
 CLRCIN                       : C10       : output : 3.3-V LVTTL       :         : 8         : Y              
@@ -575,7 +575,7 @@ RESERVED_INPUT               : L3        :        :                   :         
 RESERVED_INPUT               : L4        :        :                   :         : 1         :                
 RESERVED_INPUT               : L5        :        :                   :         : 1         :                
 RESERVED_INPUT               : L6        :        :                   :         : 1         :                
-RESERVED_INPUT               : L7        :        :                   :         : 1         :                
+RAM_A13                      : L7        : output : 3.3-V LVTTL       :         : 1         : Y              
 RESERVED_INPUT               : L8        :        :                   :         : 1         :                
 GND                          : L9        : gnd    :                   :         :           :                
 VCCINT                       : L10       : power  :                   : 1.2V    :           :                
@@ -632,7 +632,7 @@ RESERVED_INPUT               : N4        :        :                   :         
 VCCIO1                       : N5        : power  :                   : 3.3V    : 1         :                
 GND                          : N6        : gnd    :                   :         :           :                
 ASMI_interface:ASMI_int_inst|ASMI:ASMI_inst|ASMI_altasmi_parallel_smm2:ASMI_altasmi_parallel_smm2_component|sd2~ALTERA_DATA0 : N7        : input  : 3.3-V LVTTL       :         : 1         : N              
-RAM_A13                      : N8        : output : 3.3-V LVTTL       :         : 1         : Y              
+RESERVED_INPUT               : N8        :        :                   :         : 1         :                
 GND                          : N9        : gnd    :                   :         :           :                
 VCCINT                       : N10       : power  :                   : 1.2V    :           :                
 GND                          : N11       : gnd    :                   :         :           :                
@@ -653,7 +653,7 @@ INA_2[15]                    : N25       : input  : 3.3-V LVTTL       :         
 RESERVED_INPUT               : N26       :        :                   :         : 6         :                
 GND                          : N27       : gnd    :                   :         :           :                
 VCCIO6                       : N28       : power  :                   : 3.3V    : 6         :                
-RAM_A0                       : P1        : output : 3.3-V LVTTL       :         : 1         : N              
+RESERVED_INPUT               : P1        :        :                   :         : 1         :                
 RESERVED_INPUT               : P2        :        :                   :         : 1         :                
 ASMI_interface:ASMI_int_inst|ASMI:ASMI_inst|ASMI_altasmi_parallel_smm2:ASMI_altasmi_parallel_smm2_component|sd2~ALTERA_DCLK : P3        : output : 3.3-V LVTTL       :         : 1         : N              
 nCONFIG                      : P4        :        :                   :         : 1         :                

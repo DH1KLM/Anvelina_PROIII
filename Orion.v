@@ -607,6 +607,9 @@
 
 2026	Feb 17 -(eu2av) An additional OC-collector group has been created [4:0]Open_Collector_Anvelina_DX
            1397:	Open_Collector_Anvelina_DX 		  <=  udp_rx_data			
+
+2026	Mar 17 - (N1GP) Added ADC maximum magnitude to CC_encoder output, used when overload bit is set
+			so client can use an auto attenuate algorythm.
 */
 
 module Orion(
@@ -835,7 +838,7 @@ parameter IF_TPD  = 2;
 
 localparam board_type = 8'h05;		  	// 00 for Metis, 01 for Hermes, 02 for Griffin, 03 for Angelia, and 05 for Orion
 parameter  Orion_version = 8'd22;			// FPGA code version
-parameter  beta_version = 8'd9;	// Should be 0 for official release
+parameter  beta_version = 8'd10;	// Should be 0 for official release
 parameter  protocol_version = 8'd44;	// openHPSDR protocol version implemented
 
 //--------------------------------------------------------------
@@ -1610,7 +1613,7 @@ always @ (posedge _122_90)
 always @ (posedge C122_clk) 
 begin 
 
-	 //{DAC,x} <= {x, C122_cordic_i_out[21:8], 2'b0}; // make DAC 16-bits, use high bits for DAC
+   //{DAC,x} <= {x, C122_cordic_i_out[21:8], 2'b0}; // make DAC 16-bits, use high bits for DAC
 
    if (RAND) begin	// RAND set so de-ramdomize
 		if (INA[0]) temp_ADC[0] <= {~INA[15:1],INA[0]};
@@ -1618,15 +1621,57 @@ begin
 	end
    else temp_ADC[0] <= INA;  // not set so just copy data	 
 		
-	if (RAND_2) begin
+   if (RAND_2) begin
 		if (INA_2[0]) temp_ADC[1] <= {~INA_2[15:1], INA_2[0]};
 		else temp_ADC[1] <= INA_2;	
-	end
-	else temp_ADC[1] <= INA_2;
-	
+   end
+   else temp_ADC[1] <= INA_2;
+
 end 
 
+reg [15:0] ADC0_unsigned, ADC1_unsigned; // take ADC data AFTER the de-RANDOMIZER
+reg [15:0] ADC0_mag, ADC1_mag;
+reg [1:0] adc0_rused, adc1_rused;
+reg [1:0] adc_state = 0;
+reg adc0_ren, adc1_ren;
 
+// transfer from 122 to 125 MHz domain
+adc_mag_fifo adc0_mag_fifo_inst(.wrclk (C122_clk),.wrreq (1'b1), .rdclk (tx_clock), .rdreq (adc0_ren), 
+				.rdusedw(adc0_rused), .data (temp_ADC[0]), .q (ADC0_unsigned)); 
+adc_mag_fifo adc1_mag_fifo_inst(.wrclk (C122_clk),.wrreq (1'b1), .rdclk (tx_clock), .rdreq (adc1_ren), 
+				.rdusedw(adc1_rused), .data (temp_ADC[1]), .q (ADC1_unsigned)); 
+
+always @ (posedge tx_clock) 
+begin 
+	case(adc_state)	
+	0: begin 
+		// control FIFOs
+		if (adc0_rused > 2'd0 && adc1_rused > 2'd0) begin
+			adc0_ren <= 1'b1;
+			adc1_ren <= 1'b1;
+			adc_state <= 1;
+		end
+	end
+
+	1: begin 
+		// convert from two's compliment
+		if (ADC0_unsigned[15])
+			ADC0_mag <= ~ADC0_unsigned + 1'b1;
+		else
+			ADC0_mag <= ADC0_unsigned;
+		if (ADC1_unsigned[15])
+			ADC1_mag <= ~ADC1_unsigned + 1'b1;
+		else
+			ADC1_mag <= ADC1_unsigned;
+
+		adc0_ren <= 1'b0;
+		adc1_ren <= 1'b0;
+		adc_state <= 0;
+	end
+
+	default: adc_state <= 0;
+	endcase
+end
 
 //------------------------------------------------------------------------------
 //                 All DSP code is in the Receiver module
@@ -2188,7 +2233,7 @@ assign ALL_sequence_errors = HP_sequence_errors + Audio_sequence_errors + DUC_se
 
 cdc_sync #(32)cdc_sync_ALL (.siga(ALL_sequence_errors), .rstb(1'b0), .clkb(tx_clock), .sigb(ALL_sequence_errors_tx));
 
-CC_encoder #(NR) CC_encoder_inst (				// 50mS update rate
+CC_encoder CC_encoder_inst (	// 200mS update rate unless Tx or overflows, then 1mS
 					//	inputs
 					.clock(tx_clock),					// tx_clock  125MHz
 					.ACK (CC_ack),
@@ -2200,6 +2245,8 @@ CC_encoder #(NR) CC_encoder_inst (				// 50mS update rate
 					.locked_10MHz(locked_10MHz),		// set if the 10MHz divider PLL is locked.
 					.ADC0_overload (OVERFLOW),
 					.ADC1_overload (OVERFLOW_2),
+					.ADC0_mag (ADC0_mag),
+					.ADC1_mag (ADC1_mag),
 					.Exciter_power (Exciter_power),			
 					.FWD_power (FWD_power),
 					.REV_power (REV_power),
