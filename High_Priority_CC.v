@@ -195,7 +195,7 @@ begin
 
 						1400:	DLE_outputs		  <=  udp_rx_data; // for ANAN-8000DLE (XVTR_enable & user IO1 output)
 						1401:	Open_Collector 		  <=  udp_rx_data;    //Orion 1401
-						1397:	Open_Collector_Anvelina_DX 		  <=  udp_rx_data; // Anvelina_Pro3DX 1397
+						1397: Open_Collector_Anvelina_DX <= udp_rx_data[4:0]; // Anvelina_Pro3DX 1397
 						1402:	User_Outputs 			  <=  udp_rx_data;
 						1403:	Mercury_Attenuator     <=  udp_rx_data;	
 						

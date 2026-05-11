@@ -24,7 +24,7 @@
 module cic(reset, decimation, clock, in_strobe,  out_strobe, in_data, out_data);
 
   //design parameters
-  parameter STAGES = 5; //  Sections of both Comb and Integrate
+  parameter STAGES = 6; //  Sections of both Comb and Integrate
   parameter MIN_DECIMATION = 2;  // If MIN = MAX, we are single-rate filter
   parameter MAX_DECIMATION = 40;
   parameter IN_WIDTH = 18;
@@ -34,7 +34,6 @@ module cic(reset, decimation, clock, in_strobe,  out_strobe, in_data, out_data);
   parameter ACC_WIDTH = IN_WIDTH + (STAGES * $clog2(MAX_DECIMATION));
   
   input [$clog2(MAX_DECIMATION):0] decimation; 
-  
   input reset;
   input clock;
   input in_strobe;

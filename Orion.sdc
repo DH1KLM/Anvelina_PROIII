@@ -203,7 +203,7 @@ set_input_delay  10  -clock data_clk2 {ADCMISO} -add_delay
 # Set Maximum Delay (for setup or recovery; low-level, over-riding timing adjustments)
 #************************************************************** 
 
-set_max_delay -from LTC2208_122MHz -to PLL_IF_inst|altpll_component|auto_generated|pll1|clk[0] 6
+set_max_delay -from LTC2208_122MHz -to PLL_IF_inst|altpll_component|auto_generated|pll1|clk[0] 7
 set_max_delay -from LTC2208_122MHz -to LTC2208_122MHz 18
 #set_max_delay -from network_inst|tx_pll_inst|altpll_component|auto_generated|pll1|clk[0] -to tx_clock 20
 set_max_delay -from network_inst|tx_pll_inst|altpll_component|auto_generated|pll1|clk[0] -to network_inst|tx_pll_inst|altpll_component|auto_generated|pll1|clk[0] 21

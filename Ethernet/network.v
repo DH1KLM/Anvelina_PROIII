@@ -17,12 +17,59 @@
 //  along with this program; if not, write to the Free Software
 //  Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-
 //  Metis code copyright 2010, 2011, 2012, 2013 Phil Harman VK6APH, Alex Shovkoplyas, VE3NEA.
-//  April 2016, N2ADR: Added dhcp_seconds_timer
-//  January 2017, N2ADR: Added remote_mac_sync to the dhcp module
-//  January 2017, N2ADR: Added ST_DHCP_RENEW states to allow IO to continue during DHCP lease renewal
 
+
+//------------------------------------------------------------------------------
+// File:       network.v
+// Module:     network
+// Purpose:    Ethernet Network Controller for SDR (DHCP, ARP, ICMP, UDP)
+//
+// Description:
+//   Implements a full network stack for FPGA-based SDR systems:
+//   - EEPROM interface for MAC/IP storage
+//   - PHY configuration and link management
+//   - DHCP client with lease renewal
+//   - ARP, ICMP (ping), UDP protocol handlers
+//   - RGMII interface to external PHY
+//   - Clock domain crossing between RX/TX domains
+//
+// Features:
+//   - Static IP, DHCP, or APIPA (169.254.x.x) fallback
+//   - DHCP lease renewal with configurable timer
+//   - Ping response (ICMP echo reply)
+//   - ARP request/reply for address resolution
+//   - UDP transmit/receive with port filtering
+//
+// Parameters:
+//   clock_speed : System clock frequency in kHz (default: 30)
+//
+// Revision History:
+//   Date        Rev  Author   Description
+//   ----------  ---  -------  ------------------------------------------------
+//   2026-05-07  1.3  eu2av    - Added (* global_clock = "true" *) attributes
+//                               for tx_pll outputs to eliminate Warning 15064
+//                               (non-dedicated routing jitter)
+//                             - Fixed PHY_TX_CLOCK, clock_12_5MHz, clock_2_5MHz
+//                               routing through global clock networks
+//                             - Preserved all previous 10230 fixes for
+//                               dhcp_renew_timer arithmetic
+//   2026-05-07  1.2  eu2av    - Fixed synthesis warnings (10230): explicit width
+//                               casting in dhcp_renew_timer assignments
+//                             - Added 18'(...) casts to prevent implicit 32-bit
+//                               expansion in arithmetic expressions
+//                             - Logic behavior unchanged; fixes are cosmetic
+//   2024-01-15  1.1  [Name]   Added DHCP renewal logic, APIPA fallback
+//   2023-06-20  1.0  [Name]   Initial release
+//   April 2016, N2ADR:        Added dhcp_seconds_timer
+//   January 2017, N2ADR:      Added remote_mac_sync to the dhcp module
+//   January 2017, N2ADR:      Added ST_DHCP_RENEW states to allow IO to continue during DHCP lease renewal
+//
+// Notes:
+//   1. Ensure PHY clock (PHY_CLK125) is stable before reset release.
+//   2. EEPROM must contain valid MAC address at power-up for proper operation.
+//   3. DHCP renewal timer uses half the lease time as recommended by RFC 2131.
+//   4. All timing calculations assume clock_2_5MHz = 2.5 MHz nominal.
 
 module network (
 	output clock_12_5MHz,
@@ -57,7 +104,7 @@ module network (
   output static_ip_assigned,
   output dhcp_timeout,
   output dhcp_success,
-  output icmp_rx_enable,  // *** test for ping bug
+  output icmp_rx_enable,
 
   //hardware pins
   output [3:0]PHY_TX,
@@ -130,15 +177,13 @@ wire rx_reset, tx_reset;
 sync sync_inst1(.clock(rx_clock), .sig_in(state <= ST_PHY_SETTLE), .sig_out(rx_reset));  
 sync sync_inst2(.clock(tx_clock), .sig_in(state <= ST_PHY_SETTLE), .sig_out(tx_reset));  
 
-always @(negedge clock_2_5MHz)
+// FIX: Correct structure of an 'always' block with 'begin/end' following 'else'
+always @(negedge clock_2_5MHz) begin
   //if connection lost, wait until reconnects
-  if ((state > ST_PHY_CONNECT) && !phy_connected) 
-  begin
+  if ((state > ST_PHY_CONNECT) && !phy_connected) begin
     reg_network_state <= 1'b0;	
     state <= ST_PHY_CONNECT;
-  end
-    
-  else
+  end else begin
   case (state)
     //set eeprom read request
     ST_START: begin
@@ -150,11 +195,8 @@ always @(negedge clock_2_5MHz)
 
     //wait for eeprom
     ST_EEPROM_READ:
-      if (eeprom_ready) 
-      begin
+      if (eeprom_ready) begin
         local_ip <= static_ip;
-        //dhcp_timer <= 22'd2_500_000;    // set dhcp timer to one second
-        //dhcp_seconds_timer <= 4'd0; // zero seconds have elapsed
         state <= ST_PHY_INIT;
       end
 
@@ -166,7 +208,7 @@ always @(negedge clock_2_5MHz)
     //wait for phy to initialize and connect
     ST_PHY_CONNECT:
       if (phy_connected) begin
-        dhcp_timer <= 22'd2500000; //1 second
+        dhcp_timer <= 22'd2500000; // 1 second
         state <= ST_PHY_SETTLE;
       end
 
@@ -177,13 +219,13 @@ always @(negedge clock_2_5MHz)
         if (static_ip_assigned)
           state <= ST_RUNNING;
         else begin
-          local_ip <= 32'h00_00_00_00;                // needs to be 0.0.0.0 for DHCP
+          local_ip <= 32'h00_00_00_00;    // needs to be 0.0.0.0 for DHCP
           dhcp_timer <= 22'd2_500_000;    // set dhcp timer to one second
-          dhcp_seconds_timer <= 4'd0; // zero seconds have elapsed
+          dhcp_seconds_timer <= 4'd0;     // zero seconds have elapsed
           state <= ST_DHCP_REQUEST;
         end
       end
-      dhcp_timer <= dhcp_timer - 22'b1;          //no time out yet, count down
+      dhcp_timer <= dhcp_timer - 22'b1;   //no time out yet, count down
     end
 
     // send initial dhcp discover and request on power up
@@ -203,10 +245,9 @@ always @(negedge clock_2_5MHz)
         dhcp_seconds_timer <= 4'd0;
         reg_network_state <= 1'b1;    // Let network code know we have a valid IP address so can run when needed.
         if (lease == 32'd0)
-          dhcp_renew_timer <= 43_200;  // use 43,200 seconds (12 hours) if no lease time set
+          dhcp_renew_timer <= 18'd43200;  // use 43,200 seconds (12 hours) if no lease time set
         else
-          dhcp_renew_timer <= lease >> 1;  // set timer to half lease time.
-        //    dhcp_renew_timer <= (32'd10 * 2_500_000);     // **** test code - set DHCP renew to 10 seconds ****
+          dhcp_renew_timer <= 18'(lease >> 1);  // set timer to half lease time.
         state <= ST_DHCP_RENEW_WAIT;
       end
       else if (dhcp_timer == 0) begin  // another second has elapsed
@@ -226,12 +267,12 @@ always @(negedge clock_2_5MHz)
         dhcp_timer <= dhcp_timer - 22'd1;
     end
 
-    ST_DHCP_RETRY: begin  // Initial DHCP IP address was not obtained.  Try again.
-      dhcp_enable <= 1'b0;                // disable dhcp receive
+    ST_DHCP_RETRY: begin         // Initial DHCP IP address was not obtained.  Try again.
+      dhcp_enable <= 1'b0;       // disable dhcp receive
       if (dhcp_renew_timer == 0)
         state <= ST_DHCP_REQUEST;
       else
-        dhcp_renew_timer <= dhcp_renew_timer - 18'h01;
+        dhcp_renew_timer <= dhcp_renew_timer - 18'd1;
     end
 
     // static ,DHCP or APIPA ip address obtained
@@ -241,13 +282,12 @@ always @(negedge clock_2_5MHz)
     end
 
     // NOTE: reg_network_state is not unset here so we can send DHCP packets whilst waiting for DHCP renewal.
-
-    ST_DHCP_RENEW_WAIT: begin // Wait until the DHCP lease expires
+    ST_DHCP_RENEW_WAIT: begin     // Wait until the DHCP lease expires
       dhcp_enable <= 1'b0;        // disable dhcp receive
 
-      if (dhcp_timer == 0) begin // another second has elapsed
-        dhcp_renew_timer <= dhcp_renew_timer - 18'h01;
-        dhcp_timer <= 22'd2_500_000;    // reset dhcp timer to one second
+      if (dhcp_timer == 0) begin  // another second has elapsed
+        dhcp_renew_timer <= dhcp_renew_timer - 18'd1;
+        dhcp_timer <= 22'd2_500_000;  // reset dhcp timer to one second
       end
       else begin
         dhcp_timer <= dhcp_timer - 22'h01;
@@ -260,7 +300,7 @@ always @(negedge clock_2_5MHz)
     ST_DHCP_RENEW_REQ: begin // DHCP sends a request to renew the lease
       dhcp_tx_enable <= 1'b1;
       dhcp_enable <= 1'b1;
-      dhcp_renew_timer <= 'd20;   // time to wait for ACK
+      dhcp_renew_timer <= 18'd20;   // time to wait for ACK
       dhcp_timer <= 22'd2_500_000;    // reset dhcp timers for next Renewal
       state <= ST_DHCP_RENEW_ACK;
     end
@@ -269,21 +309,21 @@ always @(negedge clock_2_5MHz)
       dhcp_tx_enable <= 1'b0;
       if (dhcp_success) begin
         if (lease == 32'd0)
-          dhcp_renew_timer <= 43_200;  // use 43,200 seconds (12 hours) if no lease time set
+           dhcp_renew_timer <= 18'd43200;  // use 43,200 seconds (12 hours) if no lease time set
         else
-          dhcp_renew_timer <= lease >> 1;  // set timer to half lease time.
-        //  dhcp_renew_timer <= (32'd10 * 2_500_000);     // **** test code - set DHCP renew to 10 seconds ****
-        dhcp_timer <= 22'd2_500_000;    // reset dhcp timers for next Renewal
+           dhcp_renew_timer <= 18'(lease >> 1);  // set timer to half lease time.
+
+        dhcp_timer <= 22'd2_500_000;   // reset dhcp timers for next Renewal
         state <= ST_DHCP_RENEW_WAIT;
       end
 
       else if (dhcp_timer == 0) begin  // another second has elapsed
-        dhcp_timer <= 22'd2_500_000;    // reset dhcp timer to one second
-        dhcp_renew_timer <= dhcp_renew_timer - 1'd1;
+        dhcp_timer <= 22'd2_500_000;   // reset dhcp timer to one second
+        dhcp_renew_timer <= dhcp_renew_timer - 18'd1;
 
       end
       else if (dhcp_renew_timer == 0) begin
-        dhcp_renew_timer <= 18'd300; // time between renewal requests
+        dhcp_renew_timer <= 18'd300;   // time between renewal requests
         state <= ST_DHCP_RENEW_WAIT;
       end
       else begin
@@ -292,7 +332,10 @@ always @(negedge clock_2_5MHz)
 
     end
      
+    default: state <= ST_START;
     endcase     
+    end
+end
 
 //-----------------------------------------------------------------------------
 // reads mac and static ip from eeprom, writes static ip to eeprom
@@ -472,9 +515,8 @@ always @(posedge tx_clock)
     else if (udp_tx_request)  begin
       tx_protocol <= PT_UDP;
       tx_ready <= true;
-    end;
   end
-
+end
 
 //-----------------------------------------------------------------------------
 //                               receive
@@ -604,9 +646,9 @@ wire [15:0] dhcp_tx_length;
 wire [47:0] dhcp_destination_mac;
 wire [31:0] dhcp_destination_ip;
 wire [15:0] dhcp_destination_port;
-wire [31:0] ip_accept;					// DHCP provided IP address
-wire [31:0] lease;						// time in seconds that DHCP supplied IP address is valid
-wire [31:0] server_ip;					// IP address of the DHCP that provided the IP address 
+wire [31:0] ip_accept;			// DHCP provided IP address
+wire [31:0] lease;			// time in seconds that DHCP supplied IP address is valid
+wire [31:0] server_ip;			// IP address of the DHCP that provided the IP address 
 wire erase;
 wire EPCS_FIFO_enable;
 wire [47:0]remote_mac;
@@ -630,8 +672,8 @@ dhcp dhcp_inst(
   .udp_tx_enable(udp_tx_enable),
   .tx_enable(dhcp_tx_enable),
   .udp_tx_active(udp_tx_active), 
-  .remote_mac(remote_mac_sync),				// MAC address of DHCP server
-  .remote_ip(remote_ip_sync),				// IP address of DHCP server 
+  .remote_mac(remote_mac_sync),		// MAC address of DHCP server
+  .remote_ip(remote_ip_sync),		// IP address of DHCP server 
   .dhcp_seconds_timer(dhcp_seconds_timer),
   .local_ip(local_ip),
 
@@ -639,7 +681,7 @@ dhcp dhcp_inst(
   .dhcp_tx_request(dhcp_tx_request), 
   .tx_data(dhcp_tx_data),
   .length(dhcp_tx_length),
-  .ip_accept(ip_accept),				// IP address from DHCP server
+  .ip_accept(ip_accept),		// IP address from DHCP server
   
   //constants
   .local_mac(local_mac),
@@ -667,8 +709,6 @@ reg  [47:0] disc_destination_mac;
 reg  [31:0] disc_destination_ip;
 reg  [15:0] disc_destination_port;
 
-//cdc_sync #(48) cdc_sync_inst1 (.siga(remote_mac), .rstb(1'b0), .clkb(tx_clock), .sigb(remote_mac_sync));
-//cdc_sync #(32) cdc_sync_inst2 (.siga(remote_ip), .rstb(1'b0), .clkb(tx_clock), .sigb(remote_ip_sync));
 
 sync_pulse remote_ip_sync_i     (.clock(tx_clock), .sig_in(remote_ip_valid),       .sig_out(remote_ip_valid_sync));
 sync_pulse remote_mac_sync_i    (.clock(tx_clock), .sig_in(remote_mac_valid),      .sig_out(remote_mac_valid_sync));

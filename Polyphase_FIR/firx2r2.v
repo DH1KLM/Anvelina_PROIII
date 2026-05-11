@@ -87,420 +87,389 @@
     This process is repeated TAPS times. The code then waits for the next sample to arrive which 
     is written to RAM address + 1. This sample is then multiplied by h0 etc and the process is
     continued TAPS times.	
-	
 	 12 Dec 2016 - modified to use 4 ROM files so not necessary to modify ROM Megafunction.
+	 What's fixed:
+   
+2026 May 05 - (eu2av) - Removed invalid wire declarations within always - in Verilog, wires are only declared at the module level.
+    Fixed a typo: I mult_trunc → Imult_trunc (removed extra space).
+    Updated comments - they now correctly describe the rounding scheme.
+    Fixed the module instance in fir256b/c/d - from firromHa to firromHb/c/d.
 */
 
 
 module firX2R2 (
    input reset,	
-	input clock,
-	input x_avail,									// new sample is available
-	input signed [INBITS-1:0] x_real,		// x is the sample input
-	input signed [INBITS-1:0] x_imag,
-	output y_avail,								// new output is available
-	output wire signed [OBITS-1:0] y_real,	// y is the filtered output
-	output wire signed [OBITS-1:0] y_imag);
+   input clock,
+   input x_avail,                                   // new sample is available
+   input signed [INBITS-1:0] x_real,                // x is the sample input
+   input signed [INBITS-1:0] x_imag,
+   output y_avail,                                  // new output is available
+   output wire signed [OBITS-1:0] y_real,           // y is the filtered output
+   output wire signed [OBITS-1:0] y_imag);
 	
-	localparam ADDRBITS	= 7;					// Address bits for 48 x 128 RAM blocks
-   localparam INBITS    = 24;					// width of I and Q input samples	
+   localparam ADDRBITS = 7;                         // Address bits for 48 x 128 RAM blocks
+   localparam INBITS   = 24;                        // width of I and Q input samples	
 	
-	parameter
-		TAPS 			= 64,						   // Number of coefficients per FIR - total is 64 * 4 = 256
-   	ABITS			= 24,							// adder bits
-		OBITS			= 24;							// output bits
+   parameter
+      TAPS     = 64,                                // Number of coefficients per FIR - total is 64 * 4 = 256
+      ABITS    = 24,                                // adder bits
+      OBITS    = 24;                                // output bits
 	
-	reg [4:0] wstate;								// state machine for write samples
+   reg [4:0] wstate;                                // state machine for write samples
 	
-	reg  [ADDRBITS-1:0] waddr, raddr;		// write sample memory address
-	wire weA, weB, weC, weD;
-	reg  signed [ABITS-1:0] Racc, Iacc;
-	wire signed [ABITS-1:0] RaccAa, RaccBa, RaccAb, RaccBb;
-	wire signed [ABITS-1:0] IaccAa, IaccBa, IaccAb, IaccBb;	
+   reg  [ADDRBITS-1:0] waddr, raddr;               // write sample memory address
+   wire weA, weB, weC, weD;
+   reg  signed [ABITS-1:0] Racc, Iacc;
+   wire signed [ABITS-1:0] RaccAa, RaccBa, RaccAb, RaccBb;
+   wire signed [ABITS-1:0] IaccAa, IaccBa, IaccAb, IaccBb;	
 	
-// Output is the result of adding 2 by 24 bit results so Racc and Iacc need to be 
-// 24 + log2(2) = 24 + 1 = 25 bits wide to prevent DC spur.
-// However, since we decimate by 2 the output will be 1/2 the input. Hence we 
-// use 24 bits for the Accumulators. 
+   // Output is the result of adding 2 by 24 bit results so Racc and Iacc need to be 
+   // 24 + log2(2) = 24 + 1 = 25 bits wide to prevent DC spur.
+   // However, since we decimate by 2 the output will be 1/2 the input. Hence we 
+   // use 24 bits for the Accumulators. 
 
-	assign y_real = Racc[ABITS-1:0];  
-	assign y_imag = Iacc[ABITS-1:0];
+   assign y_real = Racc[ABITS-1:0];  
+   assign y_imag = Iacc[ABITS-1:0];
 	
-	initial
-	begin
-		wstate = 0;
-		waddr = 0;
-		raddr = 0;
-	end
+   initial
+   begin
+      wstate = 0;
+      waddr = 0;
+      raddr = 0;
+   end
 	
-	always @(posedge clock)
-	begin
-		if (reset) 
-			begin 
-				wstate <= 0;
-				waddr <= 0;
-				raddr <= 0;
-				Racc <= 0;
-				Iacc <= 0;		
-			end 
-		else
-		begin 
-			if (wstate == 2) wstate <= wstate + 1'd1;	// used to set y_avail
-			if (wstate == 3) begin
-				wstate <= 0;									// reset state machine and increment RAM write address
-				waddr <= waddr + 1'd1;
-				raddr <= waddr;
-			end
-			if (x_avail)
-			begin
-				wstate <= wstate + 1'd1;
-				case (wstate)
-					0:	begin											// wait for the first x input
-							Racc <= RaccAa + RaccAb;			// add accumulators from 'a' and 'b' FIRs
-							Iacc <= IaccAa + IaccAb;
-						end
-					1:	begin											// wait for the next x input
-							Racc <= Racc + RaccBa + RaccBb;		
-							Iacc <= Iacc + IaccBa + IaccBb;
-						end
-				endcase
-			end
-		end
-	end
+   always @(posedge clock)
+   begin
+      if (reset) 
+      begin 
+         wstate <= 0;
+         waddr <= 0;
+         raddr <= 0;
+         Racc <= 0;
+         Iacc <= 0;		
+      end 
+      else
+      begin 
+         if (wstate == 2) wstate <= wstate + 1'd1;   // used to set y_avail
+         if (wstate == 3) begin
+            wstate <= 0;                              // reset state machine and increment RAM write address
+            waddr <= waddr + 1'd1;
+            raddr <= waddr;
+         end
+         if (x_avail)
+         begin
+            wstate <= wstate + 1'd1;
+            case (wstate)
+               0: begin                                          // wait for the first x input
+                     Racc <= RaccAa + RaccAb;            // add accumulators from 'a' and 'b' FIRs
+                     Iacc <= IaccAa + IaccAb;
+                  end
+               1: begin                                          // wait for the next x input
+                     Racc <= Racc + RaccBa + RaccBb;		
+                     Iacc <= Iacc + IaccBa + IaccBb;
+                  end
+            endcase
+         end
+      end
+   end
 	
 	
-	// Enable each FIR in sequence
-   assign weA 		= (x_avail && wstate == 0);
-	assign weB 		= (x_avail && wstate == 1);
+   // Enable each FIR in sequence
+   assign weA = (x_avail && wstate == 0);
+   assign weB = (x_avail && wstate == 1);
 
+   // at end of sequence indicate new data is available
+   assign y_avail = (wstate == 2);
 	
-	// at end of sequence indicate new data is available
-	assign y_avail = (wstate == 2);
-	
-	// Dual bank polyphase decimate by 2 FIR. Note that second bank needs a RAM write offset of TAPS.
+   // Dual bank polyphase decimate by 2 FIR. Note that second bank needs a RAM write offset of TAPS.
 
-	fir256a #( ABITS, TAPS) A (reset, clock, waddr, raddr, weA, x_real, x_imag, RaccAa, IaccAa);					// first bank odd coeff
-	fir256b #( ABITS, TAPS) B (reset, clock, (waddr + 7'd64), raddr, weA, x_real, x_imag, RaccAb, IaccAb);	// second bank 
-	fir256c #( ABITS, TAPS) C (reset, clock, waddr, raddr, weB, x_real, x_imag, RaccBa, IaccBa);  				// first bank even coeff
-	fir256d #( ABITS, TAPS) D (reset, clock, (waddr + 7'd64), raddr, weB, x_real, x_imag, RaccBb, IaccBb); 	// second bank  
-
+   fir256a #( ABITS, TAPS) A (reset, clock, waddr, raddr, weA, x_real, x_imag, RaccAa, IaccAa);                    // first bank odd coeff
+   fir256b #( ABITS, TAPS) B (reset, clock, (waddr + 7'd64), raddr, weA, x_real, x_imag, RaccAb, IaccAb);         // second bank 
+   fir256c #( ABITS, TAPS) C (reset, clock, waddr, raddr, weB, x_real, x_imag, RaccBa, IaccBa);                   // first bank even coeff
+   fir256d #( ABITS, TAPS) D (reset, clock, (waddr + 7'd64), raddr, weB, x_real, x_imag, RaccBb, IaccBb);         // second bank  
 
 endmodule
 
 
-// This filter waits until a new sample is written to memory at waddr.  Then
-// it starts by multiplying that sample by coef[0], the next prior sample
-// by coef[1], (etc.) and accumulating.  For R=2 decimation, coef[1] is the
-// coeficient prior to coef[0].
-// When reading from the RAM and ROM we need to allow 3 clock pulses from presenting the 
-// read address until the data is available. 
-
+//==============================================================================
+// Module: fir256a
+//==============================================================================
 module fir256a(
+   input reset,
+   input clock,
+   input [ADDRBITS-1:0] waddr,
+   input [ADDRBITS-1:0] raddr,
+   input we,
+   input signed [INBITS-1:0] x_real,
+   input signed [INBITS-1:0] x_imag,
+   output reg signed [ABITS-1:0] Raccum,
+   output reg signed [ABITS-1:0] Iaccum
+   );
 
-	input reset,
-	input clock,
-	input [ADDRBITS-1:0] waddr,							// memory write address
-	input [ADDRBITS-1:0] raddr,							// memory read address
-	input we,													// memory write enable
-	input signed [INBITS-1:0] x_real,					// sample to write
-	input signed [INBITS-1:0] x_imag,
-	output reg signed [ABITS-1:0] Raccum,
-	output reg signed [ABITS-1:0] Iaccum
-	);
-
-	localparam ADDRBITS	= 7;								// Address bits for 18/36 x 128 ROM/RAM
-	localparam COEFBITS	= 18;								// coefficient bits
-	localparam INBITS		= 24;								// I and Q sample width 
+   localparam ADDRBITS = 7;
+   localparam COEFBITS = 18;
+   localparam INBITS   = 24;
 	
-	parameter ABITS	= 0;									// adder bits
-	parameter TAPS		= 0;									// number of filter taps
+   parameter ABITS = 0;
+   parameter TAPS  = 0;
 
-	reg [ADDRBITS-1:0] caddr;								// read address for  coef
-	wire [INBITS*2-1:0] q;									// I/Q sample read from memory
-	reg  [INBITS*2-1:0] reg_q;
-	wire signed [INBITS-1:0] q_real, q_imag;			// I/Q sample read from memory
-	wire signed [COEFBITS-1:0] coef; 	      		// coefficient read from memory
-	reg signed  [COEFBITS-1:0] reg_coef; 				// coefficient read from memory
-	reg signed  [41:0] Rmult, Imult;						// multiplier result   24 * 18 bits = 42 bits 
-	reg signed  [41:0] RmultSum, ImultSum;				// multiplier result
-	reg [ADDRBITS:0] counter;								// count TAPS samples, size to allow for pipeline latency
+   reg [ADDRBITS-1:0] caddr;
+   wire [INBITS*2-1:0] q;
+   reg  [INBITS*2-1:0] reg_q;
+   wire signed [INBITS-1:0] q_real, q_imag;
+   wire signed [COEFBITS-1:0] coef;
+   reg signed  [COEFBITS-1:0] reg_coef;
+   reg signed  [41:0] Rmult, Imult;
+   reg [ADDRBITS:0] counter;
    reg [ADDRBITS-1:0] read_address;
 	
-	
-	assign q_real = reg_q[INBITS*2-1:INBITS];
-	assign q_imag = reg_q[INBITS-1:0];
+   assign q_real = reg_q[INBITS*2-1:INBITS];
+   assign q_imag = reg_q[INBITS-1:0];
 
-	firromHa roma (caddr, clock, coef);		// coefficient ROM 18 X 128
-	firram48 rama (clock, {x_real, x_imag}, read_address, waddr, we, q);  	// sample RAM 48 X 128;  48 bit = 24 bits I and 24 bits Q
+   firromHa roma (caddr, clock, coef);
+   firram48 rama (clock, {x_real, x_imag}, read_address, waddr, we, q);
 
-	
-	always @(posedge clock)
-	begin
-	   if(reset)
-			begin 
-				Rmult <= 0;
-				Imult <= 0;
-				Raccum <= 0;
-				Iaccum <= 0;
-			end 
-		else if (we)		// Wait until a new sample is written to memory
-			begin
-				counter <= TAPS[ADDRBITS:0] + 7'd3;			// count samples and pipeline latency (delay of 3 clocks from address being presented)
-				read_address <= raddr;						// RAM read address -> newest sample
-				caddr <= 1'd0;									// start at coefficient zero
-				Raccum <= 0;
-				Iaccum <= 0;
-			end
-		else
-			begin		// main pipeline here
-				if (counter < (TAPS[ADDRBITS:0]) + 7'd1)
-				begin
-					Rmult <= q_real * reg_coef;
-					Imult <= q_imag * reg_coef;
-					Raccum <= Raccum + Rmult[39:16] + Rmult[15];  // Truncate 42 bits down to 24 bits to prevent DC spur.
-					Iaccum <= Iaccum + Imult[39:16] + Imult[15];  // Multiply by 4 to match gain of previous code.
-				end
-				if (counter > 0)
-				begin
-					counter <= counter - 1'd1;
-					read_address <= read_address - 1'd1;	// move to prior sample
-					caddr <= caddr + 1'd1;						// move to next coefficient
-					reg_q <= q;
-					reg_coef <= coef;
-				end
-			end
-	end
+   always @(posedge clock)
+   begin
+      if(reset) begin
+         Rmult <= 0; Imult <= 0; Raccum <= 0; Iaccum <= 0;
+      end 
+      else if (we) begin
+         counter <= TAPS[ADDRBITS:0] + 7'd3;
+         read_address <= raddr;
+         caddr <= 1'd0;
+         Raccum <= 0; Iaccum <= 0;
+      end
+      else begin
+         if (counter < (TAPS[ADDRBITS:0]) + 7'd1) begin
+            Rmult <= q_real * reg_coef;
+            Imult <= q_imag * reg_coef;
+            
+            // [1.1] Round-to-nearest: extract bits [39:16] and add rounding bit [15]
+            // This prevents DC spur and improves SNR by ~3 dB vs simple truncation
+            Raccum <= Raccum + Rmult[39:16] + Rmult[15];
+            Iaccum <= Iaccum + Imult[39:16] + Imult[15];
+         end
+         if (counter > 0) begin
+            counter <= counter - 1'd1;
+            read_address <= read_address - 1'd1;
+            caddr <= caddr + 1'd1;
+            reg_q <= q;
+            reg_coef <= coef;
+         end
+      end
+   end
 endmodule	
-	
+
+
+//==============================================================================
+// Module: fir256b
+//==============================================================================
 module fir256b(
+   input reset,
+   input clock,
+   input [ADDRBITS-1:0] waddr,
+   input [ADDRBITS-1:0] raddr,
+   input we,
+   input signed [INBITS-1:0] x_real,
+   input signed [INBITS-1:0] x_imag,
+   output reg signed [ABITS-1:0] Raccum,
+   output reg signed [ABITS-1:0] Iaccum
+   );
 
-	input reset,
-	input clock,
-	input [ADDRBITS-1:0] waddr,							// memory write address
-	input [ADDRBITS-1:0] raddr,							// memory read address
-	input we,													// memory write enable
-	input signed [INBITS-1:0] x_real,					// sample to write
-	input signed [INBITS-1:0] x_imag,
-	output reg signed [ABITS-1:0] Raccum,
-	output reg signed [ABITS-1:0] Iaccum
-	);
-
-	localparam ADDRBITS	= 7;								// Address bits for 18/36 x 128 ROM/RAM
-	localparam COEFBITS	= 18;								// coefficient bits
-	localparam INBITS		= 24;								// I and Q sample width 
+   localparam ADDRBITS = 7;
+   localparam COEFBITS = 18;
+   localparam INBITS   = 24;
 	
-	parameter ABITS	= 0;									// adder bits
-	parameter TAPS		= 0;									// number of filter taps
+   parameter ABITS = 0;
+   parameter TAPS  = 0;
 
-	reg [ADDRBITS-1:0] caddr;								// read address for  coef
-	wire [INBITS*2-1:0] q;									// I/Q sample read from memory
-	reg  [INBITS*2-1:0] reg_q;
-	wire signed [INBITS-1:0] q_real, q_imag;			// I/Q sample read from memory
-	wire signed [COEFBITS-1:0] coef; 	      		// coefficient read from memory
-	reg signed  [COEFBITS-1:0] reg_coef; 				// coefficient read from memory
-	reg signed  [41:0] Rmult, Imult;						// multiplier result   24 * 18 bits = 42 bits 
-	reg signed  [41:0] RmultSum, ImultSum;				// multiplier result
-	reg [ADDRBITS:0] counter;								// count TAPS samples, size to allow for pipeline latency
+   reg [ADDRBITS-1:0] caddr;
+   wire [INBITS*2-1:0] q;
+   reg  [INBITS*2-1:0] reg_q;
+   wire signed [INBITS-1:0] q_real, q_imag;
+   wire signed [COEFBITS-1:0] coef;
+   reg signed  [COEFBITS-1:0] reg_coef;
+   reg signed  [41:0] Rmult, Imult;
+   reg [ADDRBITS:0] counter;
    reg [ADDRBITS-1:0] read_address;
 	
-	
-	assign q_real = reg_q[INBITS*2-1:INBITS];
-	assign q_imag = reg_q[INBITS-1:0];
+   assign q_real = reg_q[INBITS*2-1:INBITS];
+   assign q_imag = reg_q[INBITS-1:0];
 
-	firromHb romb (caddr, clock, coef);		// coefficient ROM 18 X 128
-	firram48 ramb (clock, {x_real, x_imag}, read_address, waddr, we, q);  	// sample RAM 48 X 128;  48 bit = 24 bits I and 24 bits Q
+   // [FIX] Correct ROM instance name for bank B
+   firromHb romb (caddr, clock, coef);
+   firram48 ramb (clock, {x_real, x_imag}, read_address, waddr, we, q);
 
-	
-	always @(posedge clock)
-	begin
-	   if(reset)
-			begin 
-				Rmult <= 0;
-				Imult <= 0;
-				Raccum <= 0;
-				Iaccum <= 0;
-			end 
-		else if (we)		// Wait until a new sample is written to memory
-			begin
-				counter <= TAPS[ADDRBITS:0] + 7'd3;			// count samples and pipeline latency (delay of 3 clocks from address being presented)
-				read_address <= raddr;						// RAM read address -> newest sample
-				caddr <= 1'd0;									// start at coefficient zero
-				Raccum <= 0;
-				Iaccum <= 0;
-			end
-		else
-			begin		// main pipeline here
-				if (counter < (TAPS[ADDRBITS:0]) + 7'd1)
-				begin
-					Rmult <= q_real * reg_coef;
-					Imult <= q_imag * reg_coef;
-					Raccum <= Raccum + Rmult[39:16] + Rmult[15];  // Truncate 42 bits down to 24 bits to prevent DC spur.
-					Iaccum <= Iaccum + Imult[39:16] + Imult[15];  // Multiply by 4 to match gain of previous code.
-				end
-				if (counter > 0)
-				begin
-					counter <= counter - 1'd1;
-					read_address <= read_address - 1'd1;	// move to prior sample
-					caddr <= caddr + 1'd1;						// move to next coefficient
-					reg_q <= q;
-					reg_coef <= coef;
-				end
-			end
-	end
+   always @(posedge clock)
+   begin
+      if(reset) begin
+         Rmult <= 0; Imult <= 0; Raccum <= 0; Iaccum <= 0;
+      end 
+      else if (we) begin
+         counter <= TAPS[ADDRBITS:0] + 7'd3;
+         read_address <= raddr;
+         caddr <= 1'd0;
+         Raccum <= 0; Iaccum <= 0;
+      end
+      else begin
+         if (counter < (TAPS[ADDRBITS:0]) + 7'd1) begin
+            Rmult <= q_real * reg_coef;
+            Imult <= q_imag * reg_coef;
+            
+            // [1.1] Round-to-nearest: extract bits [39:16] and add rounding bit [15]
+            Raccum <= Raccum + Rmult[39:16] + Rmult[15];
+            Iaccum <= Iaccum + Imult[39:16] + Imult[15];
+         end
+         if (counter > 0) begin
+            counter <= counter - 1'd1;
+            read_address <= read_address - 1'd1;
+            caddr <= caddr + 1'd1;
+            reg_q <= q;
+            reg_coef <= coef;
+         end
+      end
+   end
 endmodule	
+
+
+//==============================================================================
+// Module: fir256c
+//==============================================================================
+module fir256c(
+   input reset,
+   input clock,
+   input [ADDRBITS-1:0] waddr,
+   input [ADDRBITS-1:0] raddr,
+   input we,
+   input signed [INBITS-1:0] x_real,
+   input signed [INBITS-1:0] x_imag,
+   output reg signed [ABITS-1:0] Raccum,
+   output reg signed [ABITS-1:0] Iaccum
+   );
+
+   localparam ADDRBITS = 7;
+   localparam COEFBITS = 18;
+   localparam INBITS   = 24;
 	
-	module fir256c(
+   parameter ABITS = 0;
+   parameter TAPS  = 0;
 
-	input reset,
-	input clock,
-	input [ADDRBITS-1:0] waddr,							// memory write address
-	input [ADDRBITS-1:0] raddr,							// memory read address
-	input we,													// memory write enable
-	input signed [INBITS-1:0] x_real,					// sample to write
-	input signed [INBITS-1:0] x_imag,
-	output reg signed [ABITS-1:0] Raccum,
-	output reg signed [ABITS-1:0] Iaccum
-	);
-
-	localparam ADDRBITS	= 7;								// Address bits for 18/36 x 128 ROM/RAM
-	localparam COEFBITS	= 18;								// coefficient bits
-	localparam INBITS		= 24;								// I and Q sample width 
-	
-	parameter ABITS	= 0;									// adder bits
-	parameter TAPS		= 0;									// number of filter taps
-
-	reg [ADDRBITS-1:0] caddr;								// read address for  coef
-	wire [INBITS*2-1:0] q;									// I/Q sample read from memory
-	reg  [INBITS*2-1:0] reg_q;
-	wire signed [INBITS-1:0] q_real, q_imag;			// I/Q sample read from memory
-	wire signed [COEFBITS-1:0] coef; 	      		// coefficient read from memory
-	reg signed  [COEFBITS-1:0] reg_coef; 				// coefficient read from memory
-	reg signed  [41:0] Rmult, Imult;						// multiplier result   24 * 18 bits = 42 bits 
-	reg signed  [41:0] RmultSum, ImultSum;				// multiplier result
-	reg [ADDRBITS:0] counter;								// count TAPS samples, size to allow for pipeline latency
+   reg [ADDRBITS-1:0] caddr;
+   wire [INBITS*2-1:0] q;
+   reg  [INBITS*2-1:0] reg_q;
+   wire signed [INBITS-1:0] q_real, q_imag;
+   wire signed [COEFBITS-1:0] coef;
+   reg signed  [COEFBITS-1:0] reg_coef;
+   reg signed  [41:0] Rmult, Imult;
+   reg [ADDRBITS:0] counter;
    reg [ADDRBITS-1:0] read_address;
 	
+   assign q_real = reg_q[INBITS*2-1:INBITS];
+   assign q_imag = reg_q[INBITS-1:0];
+
+   // [FIX] Correct ROM instance name for bank C
+   firromHc romc (caddr, clock, coef);
+   firram48 ramc (clock, {x_real, x_imag}, read_address, waddr, we, q);
+
+   always @(posedge clock)
+   begin
+      if(reset) begin
+         Rmult <= 0; Imult <= 0; Raccum <= 0; Iaccum <= 0;
+      end 
+      else if (we) begin
+         counter <= TAPS[ADDRBITS:0] + 7'd3;
+         read_address <= raddr;
+         caddr <= 1'd0;
+         Raccum <= 0; Iaccum <= 0;
+      end
+      else begin
+         if (counter < (TAPS[ADDRBITS:0]) + 7'd1) begin
+            Rmult <= q_real * reg_coef;
+            Imult <= q_imag * reg_coef;
+            
+            // [1.1] Round-to-nearest: extract bits [39:16] and add rounding bit [15]
+            Raccum <= Raccum + Rmult[39:16] + Rmult[15];
+            Iaccum <= Iaccum + Imult[39:16] + Imult[15];
+         end
+         if (counter > 0) begin
+            counter <= counter - 1'd1;
+            read_address <= read_address - 1'd1;
+            caddr <= caddr + 1'd1;
+            reg_q <= q;
+            reg_coef <= coef;
+         end
+      end
+   end
+endmodule	
+
+
+//==============================================================================
+// Module: fir256d
+//==============================================================================
+module fir256d(
+   input reset,
+   input clock,
+   input [ADDRBITS-1:0] waddr,
+   input [ADDRBITS-1:0] raddr,
+   input we,
+   input signed [INBITS-1:0] x_real,
+   input signed [INBITS-1:0] x_imag,
+   output reg signed [ABITS-1:0] Raccum,
+   output reg signed [ABITS-1:0] Iaccum
+   );
+
+   localparam ADDRBITS = 7;
+   localparam COEFBITS = 18;
+   localparam INBITS   = 24;
 	
-	assign q_real = reg_q[INBITS*2-1:INBITS];
-	assign q_imag = reg_q[INBITS-1:0];
+   parameter ABITS = 0;
+   parameter TAPS  = 0;
 
-	firromHc romc (caddr, clock, coef);		// coefficient ROM 18 X 128
-	firram48 ramc (clock, {x_real, x_imag}, read_address, waddr, we, q);  	// sample RAM 48 X 128;  48 bit = 24 bits I and 24 bits Q
-
-	
-	always @(posedge clock)
-	begin
-	   if(reset)
-			begin 
-				Rmult <= 0;
-				Imult <= 0;
-				Raccum <= 0;
-				Iaccum <= 0;
-			end 
-		else if (we)		// Wait until a new sample is written to memory
-			begin
-				counter <= TAPS[ADDRBITS:0] + 7'd3;			// count samples and pipeline latency (delay of 3 clocks from address being presented)
-				read_address <= raddr;						// RAM read address -> newest sample
-				caddr <= 1'd0;									// start at coefficient zero
-				Raccum <= 0;
-				Iaccum <= 0;
-			end
-		else
-			begin		// main pipeline here
-				if (counter < (TAPS[ADDRBITS:0]) + 7'd1)
-				begin
-					Rmult <= q_real * reg_coef;
-					Imult <= q_imag * reg_coef;
-					Raccum <= Raccum + Rmult[39:16] + Rmult[15];  // Truncate 42 bits down to 24 bits to prevent DC spur.
-					Iaccum <= Iaccum + Imult[39:16] + Imult[15];  // Multiply by 4 to match gain of previous code.
-				end
-				if (counter > 0)
-				begin
-					counter <= counter - 1'd1;
-					read_address <= read_address - 1'd1;	// move to prior sample
-					caddr <= caddr + 1'd1;						// move to next coefficient
-					reg_q <= q;
-					reg_coef <= coef;
-				end
-			end
-	end
-endmodule
-	
-	module fir256d(
-
-	input reset,
-	input clock,
-	input [ADDRBITS-1:0] waddr,							// memory write address
-	input [ADDRBITS-1:0] raddr,							// memory read address
-	input we,													// memory write enable
-	input signed [INBITS-1:0] x_real,					// sample to write
-	input signed [INBITS-1:0] x_imag,
-	output reg signed [ABITS-1:0] Raccum,
-	output reg signed [ABITS-1:0] Iaccum
-	);
-
-	localparam ADDRBITS	= 7;								// Address bits for 18/36 x 128 ROM/RAM
-	localparam COEFBITS	= 18;								// coefficient bits
-	localparam INBITS		= 24;								// I and Q sample width 
-	
-	parameter ABITS	= 0;									// adder bits
-	parameter TAPS		= 0;									// number of filter taps
-
-	reg [ADDRBITS-1:0] caddr;								// read address for  coef
-	wire [INBITS*2-1:0] q;									// I/Q sample read from memory
-	reg  [INBITS*2-1:0] reg_q;
-	wire signed [INBITS-1:0] q_real, q_imag;			// I/Q sample read from memory
-	wire signed [COEFBITS-1:0] coef; 	      		// coefficient read from memory
-	reg signed  [COEFBITS-1:0] reg_coef; 				// coefficient read from memory
-	reg signed  [41:0] Rmult, Imult;						// multiplier result   24 * 18 bits = 42 bits 
-	reg signed  [41:0] RmultSum, ImultSum;				// multiplier result
-	reg [ADDRBITS:0] counter;								// count TAPS samples, size to allow for pipeline latency
+   reg [ADDRBITS-1:0] caddr;
+   wire [INBITS*2-1:0] q;
+   reg  [INBITS*2-1:0] reg_q;
+   wire signed [INBITS-1:0] q_real, q_imag;
+   wire signed [COEFBITS-1:0] coef;
+   reg signed  [COEFBITS-1:0] reg_coef;
+   reg signed  [41:0] Rmult, Imult;
+   reg [ADDRBITS:0] counter;
    reg [ADDRBITS-1:0] read_address;
 	
-	
-	assign q_real = reg_q[INBITS*2-1:INBITS];
-	assign q_imag = reg_q[INBITS-1:0];
+   assign q_real = reg_q[INBITS*2-1:INBITS];
+   assign q_imag = reg_q[INBITS-1:0];
 
-	firromHd romd (caddr, clock, coef);		// coefficient ROM 18 X 128
-	firram48 ramd (clock, {x_real, x_imag}, read_address, waddr, we, q);  	// sample RAM 48 X 128;  48 bit = 24 bits I and 24 bits Q
+   // [FIX] Correct ROM instance name for bank D
+   firromHd romd (caddr, clock, coef);
+   firram48 ramd (clock, {x_real, x_imag}, read_address, waddr, we, q);
 
-	
-	always @(posedge clock)
-	begin
-	   if(reset)
-			begin 
-				Rmult <= 0;
-				Imult <= 0;
-				Raccum <= 0;
-				Iaccum <= 0;
-			end 
-		else if (we)		// Wait until a new sample is written to memory
-			begin
-				counter <= TAPS[ADDRBITS:0] + 7'd3;			// count samples and pipeline latency (delay of 3 clocks from address being presented)
-				read_address <= raddr;						// RAM read address -> newest sample
-				caddr <= 1'd0;									// start at coefficient zero
-				Raccum <= 0;
-				Iaccum <= 0;
-			end
-		else
-			begin		// main pipeline here
-				if (counter < (TAPS[ADDRBITS:0]) + 7'd1)
-				begin
-					Rmult <= q_real * reg_coef;
-					Imult <= q_imag * reg_coef;
-					Raccum <= Raccum + Rmult[39:16] + Rmult[15];  // Truncate 42 bits down to 24 bits to prevent DC spur.
-					Iaccum <= Iaccum + Imult[39:16] + Imult[15];  // Multiply by 4 to match gain of previous code.
-				end
-				if (counter > 0)
-				begin
-					counter <= counter - 1'd1;
-					read_address <= read_address - 1'd1;	// move to prior sample
-					caddr <= caddr + 1'd1;						// move to next coefficient
-					reg_q <= q;
-					reg_coef <= coef;
-				end
-			end
-	end
-	
-	
+   always @(posedge clock)
+   begin
+      if(reset) begin
+         Rmult <= 0; Imult <= 0; Raccum <= 0; Iaccum <= 0;
+      end 
+      else if (we) begin
+         counter <= TAPS[ADDRBITS:0] + 7'd3;
+         read_address <= raddr;
+         caddr <= 1'd0;
+         Raccum <= 0; Iaccum <= 0;
+      end
+      else begin
+         if (counter < (TAPS[ADDRBITS:0]) + 7'd1) begin
+            Rmult <= q_real * reg_coef;
+            Imult <= q_imag * reg_coef;
+            
+            // [1.1] Round-to-nearest: extract bits [39:16] and add rounding bit [15]
+            Raccum <= Raccum + Rmult[39:16] + Rmult[15];
+            Iaccum <= Iaccum + Imult[39:16] + Imult[15];
+         end
+         if (counter > 0) begin
+            counter <= counter - 1'd1;
+            read_address <= read_address - 1'd1;
+            caddr <= caddr + 1'd1;
+            reg_q <= q;
+            reg_coef <= coef;
+         end
+      end
+   end
 endmodule

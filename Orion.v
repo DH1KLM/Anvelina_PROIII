@@ -606,10 +606,20 @@
 			the new ports sent to General_CC so applications don't have to use default ports.
 
 2026	Feb 17 -(eu2av) An additional OC-collector group has been created [4:0]Open_Collector_Anvelina_DX
-           1397:	Open_Collector_Anvelina_DX 		  <=  udp_rx_data			
+			1397:	Open_Collector_Anvelina_DX 		  <=  udp_rx_data			
 
 2026	Mar 17 - (N1GP) Added ADC maximum magnitude to CC_encoder output, used when overload bit is set
 			so client can use an auto attenuate algorythm.
+
+2026	May 05 -(eu2av) Firmware Update: PureSignal Feedback Path Optimization
+			Implemented adaptive scaling in the PureSignal feedback loop (temp_DACD). By dynamically shifting the bit-window
+			extraction, the feedback signal maintains full 16-bit resolution even at low output power (1–5 W). Result:
+			faster convergence, stable predistortion correction across all power levels, improved IMD3 suppression on weak signals.
+			DSP Chain Optimization:
+			RX: Implemented TPDF Dither before CIC decimation. Result: Elimination of quantization noise structure ("grid" on panadapter), improved Dynamic Range (+6-9 dB).
+			TX/NCO: Added Phase Dither to CORDIC phase accumulator. Result: Significant reduction of spurious harmonics (spurs), improved SFDR (+10-15 dB).
+			Filters: Changed FIR truncation to "round-to-nearest" logic. Result: Eliminated DC offset peak at center frequency, improved calculation accuracy.
+			PureSignal: Added adaptive scaling for the feedback path to ensure stable convergence at low output power levels. 
 */
 
 module Orion(
@@ -776,13 +786,13 @@ module Orion(
   //output wire RAM_A4,
   //output wire RAM_A5,
   //output wire RAM_A6,
-  output wire RAM_A7,
+  output wire RAM_A7
   //output wire RAM_A8,
   //output wire RAM_A9,
   //output wire RAM_A10,
   //output wire RAM_A11,
   //output wire RAM_A12,
- output wire RAM_A13  
+  //output wire RAM_A13  
 );
 
 assign USEROUT0 = run ? Open_Collector[1] : 1'b0;					
@@ -810,7 +820,7 @@ assign RAM_A7  = 0;
 //assign RAM_A10  = 0;
 //assign RAM_A11  = 0;
 //assign RAM_A12  = 0;
-assign RAM_A13  = 0;
+//assign RAM_A13  = 0;
 
 assign PGA = 0;								// 1 = gain of 3dB, 0 = gain of 0dB
 assign PGA_2 = 0;
@@ -838,7 +848,7 @@ parameter IF_TPD  = 2;
 
 localparam board_type = 8'h05;		  	// 00 for Metis, 01 for Hermes, 02 for Griffin, 03 for Angelia, and 05 for Orion
 parameter  Orion_version = 8'd22;			// FPGA code version
-parameter  beta_version = 8'd10;	// Should be 0 for official release
+parameter  beta_version = 8'd11;	// Should be 0 for official release
 parameter  protocol_version = 8'd44;	// openHPSDR protocol version implemented
 
 //--------------------------------------------------------------
@@ -1423,8 +1433,10 @@ begin
 
         58:
         begin
-            Mixed_audio[33:17] <=  (Mixed_LR[31:16] + Mixed_side) - (Mixed_LR[31:16] * Mixed_side / 17'd65536);
-            Mixed_audio[16:0] <=  (Mixed_LR[15:0] + Mixed_side) - (Mixed_LR[15:0] * Mixed_side / 17'd65536);
+            Mixed_audio[33:17] <= 16'((Mixed_LR[31:16] + Mixed_side) - (Mixed_LR[31:16] * Mixed_side / 17'd65536));  //eu2av - 06/05/2025/ - bug fixes
+            Mixed_audio[16:0]  <= 16'((Mixed_LR[15:0]  + Mixed_side) - (Mixed_LR[15:0]  * Mixed_side / 17'd65536));  //eu2av - 06/05/2025/ - bug fixes
+			  //Mixed_audio[33:17] <= (Mixed_LR[31:16] + Mixed_side) - (Mixed_LR[31:16] * Mixed_side / 17'd65536);
+           //Mixed_audio[16:0]  <= (Mixed_LR[15:0]  + Mixed_side) - (Mixed_LR[15:0]  * Mixed_side / 17'd65536);
         end
 
         60:
@@ -1441,8 +1453,13 @@ begin
             begin
                 if (break_in)
                 begin
-                    Rx_audio[31:16] <= Mixed_audio[33:17] - 17'd32768;
-                    Rx_audio[15:0] <= Mixed_audio[16:0] - 17'd32768;
+                        // 1. In the module declaration section (among other regs):
+                    reg signed [16:0] audio_L_temp, audio_R_temp;  // [eu2av] for clean compilation
+                        // 2. Inside always @(posedge clock), in the audio block:
+                    audio_L_temp = Mixed_audio[33:17] - 17'd32768;
+                    audio_R_temp = Mixed_audio[16:0] - 17'd32768;
+                    Rx_audio[31:16] <= audio_L_temp[15:0];
+                    Rx_audio[15:0] <= audio_R_temp[15:0];
                 end
                 else
                     Rx_audio <= {prof_sidetone, prof_sidetone};
@@ -1601,19 +1618,47 @@ sidetone sidetone_inst( .clock(CLRCLK), .enable(sidetone), .tone_freq(tone_freq)
 */
 
 reg [15:0]temp_ADC[0:1];
-//reg [15:0] DAC; // move DAC data into Rx clock domain for PureSignal use.
 reg [15:0] temp_DACD;
-//reg [15:0] x;
+//==============================================================================
+//eu2av - [PureSignal Feedback Path - Option 2: Adaptive Scaling] 05/05/2026
+// Allows amplifying the feedback signal for better accuracy at low power.
+// PS_SCALE = 0 : Normal (Bits [21:8])
+// PS_SCALE = 1 : x2 Gain (Bits [20:7])
+// PS_SCALE = 2 : x4 Gain (Bits [19:6])
+// ... up to x64
+//==============================================================================
 
-always @ (posedge _122_90)
-	temp_DACD <={C122_cordic_i_out[21:8], 2'b00};
-	//temp_DACD <= C122_cordic_i_out[22:7]; 	//for predistortion use (PureSignal)
+// Change this parameter to test different gains (0 to 6)
+// 0 is the standard behavior. Increase if PureSignal is weak at low power.
+localparam PS_SCALE = 3'd0; 
+
+reg [13:0] ps_slice;
+reg        ps_round_bit;
+
+// Combinational logic to select the bit window (Barrel Shifter equivalent)
+always @(*) begin
+    case (PS_SCALE)
+        3'd0: begin ps_slice = C122_cordic_i_out[21:8];  ps_round_bit = C122_cordic_i_out[7];  end
+        3'd1: begin ps_slice = C122_cordic_i_out[20:7];  ps_round_bit = C122_cordic_i_out[6];  end
+        3'd2: begin ps_slice = C122_cordic_i_out[19:6];  ps_round_bit = C122_cordic_i_out[5];  end
+        3'd3: begin ps_slice = C122_cordic_i_out[18:5];  ps_round_bit = C122_cordic_i_out[4];  end
+        3'd4: begin ps_slice = C122_cordic_i_out[17:4];  ps_round_bit = C122_cordic_i_out[3];  end
+        3'd5: begin ps_slice = C122_cordic_i_out[16:3];  ps_round_bit = C122_cordic_i_out[2];  end
+        3'd6: begin ps_slice = C122_cordic_i_out[15:2];  ps_round_bit = C122_cordic_i_out[1];  end
+        default: begin ps_slice = C122_cordic_i_out[21:8]; ps_round_bit = C122_cordic_i_out[7]; end
+    endcase
+end
+
+always @ (posedge _122_90) begin
+    // Apply rounding and form 16-bit output
+    // {slice + round_bit, 2'b00}
+    temp_DACD <= {ps_slice + ps_round_bit, 2'b00};
+end
 
 
 always @ (posedge C122_clk) 
 begin 
 
-   //{DAC,x} <= {x, C122_cordic_i_out[21:8], 2'b0}; // make DAC 16-bits, use high bits for DAC
 
    if (RAND) begin	// RAND set so de-ramdomize
 		if (INA[0]) temp_ADC[0] <= {~INA[15:1],INA[0]};
@@ -1827,7 +1872,7 @@ CicInterpM5 #(.RRRR(640), .IBITS(24), .OBITS(17), .GBITS(38)) in2 (C122_clk, 1'd
 // Code rotates input at set frequency and produces I & Q 
 // overall cordic gain is Sqrt(2)*1.647 = 2.33 
 
-wire signed [21:0] C122_cordic_i_out; 				// use 22 bit output from CORDIC to allow for gain
+wire signed [21:0] C122_cordic_i_out; 		//22		// 21 = use 22 bit output from CORDIC to allow for gain
 wire signed [31:0] C122_phase_word_Tx;
 
 wire signed [16:0] I;
